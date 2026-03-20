@@ -1,0 +1,350 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum CardBrand {
+  VISA
+  MASTERCARD
+  AMEX
+  OTHER
+}
+
+enum TransactionStatus {
+  ACTIVE
+  CANCELLED
+  REFUNDED
+}
+
+enum FileType {
+  TRANSACTIONS
+  SETTLEMENTS
+}
+
+enum FileStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  ERROR
+}
+
+enum ReconciliationStatus {
+  MATCHED
+  NOT_FOUND
+  AMOUNT_MISMATCH
+}
+
+enum ReconciliationPriority {
+  AUTHORIZATION_NUMBER
+  TRANSACTION_ID
+  AMOUNT_DATE
+}
+
+enum PayoutStatus {
+  PENDING
+  CALCULATED
+  APPROVED
+  PAID
+}
+
+// ==================== MODELS ====================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  role      UserRole @default(USER)
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  uploadedFiles FileControl[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model Client {
+  id               String @id @default(uuid())
+  code             String @unique
+  name             String
+  businessName     String
+  taxId            String @unique
+  commissionTotal  Float  @default(0) // Percentage
+
+  // Contact
+  contactName      String?
+  contactEmail     String?
+  contactPhone     String?
+
+  // Bank details for payouts
+  bankName         String?
+  bankAccount      String?
+  bankClabe        String?
+
+  isActive         Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  terminals Terminal[]
+  transactions Transaction[]
+  settlements Settlement[]
+  payouts Payout[]
+
+  @@index([code])
+  @@index([taxId])
+  @@map("clients")
+}
+
+model Terminal {
+  id            String @id @default(uuid())
+  serialNumber  String @unique
+  model         String
+  location      String?
+  isActive      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  transactions Transaction[]
+  settlements Settlement[]
+
+  @@index([serialNumber])
+  @@index([clientId])
+  @@map("terminals")
+}
+
+model FileControl {
+  id              String     @id @default(uuid())
+  originalName    String
+  fileName        String     @unique
+  fileType        FileType
+  filePath        String
+  fileSize        Int
+  status          FileStatus @default(PENDING)
+  recordCount     Int        @default(0)
+  processedCount  Int        @default(0)
+  errorMessage    String?
+
+  processedAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  // Relations
+  uploadedBy String
+  uploader   User   @relation(fields: [uploadedBy], references: [id])
+
+  transactions Transaction[]
+  settlements Settlement[]
+
+  @@index([fileType])
+  @@index([status])
+  @@index([uploadedBy])
+  @@map("file_controls")
+}
+
+model Transaction {
+  id                  String @id @default(uuid())
+  transactionId       String? // From file
+  authorizationNumber String?
+  reference           String?
+
+  // Amounts
+  amount              Float
+  fee                 Float   @default(0)
+  iva                 Float   @default(0)
+
+  // Transaction details
+  cardBrand           CardBrand
+  cardNumber          String? // Masked
+  status              TransactionStatus @default(ACTIVE)
+  operationType       String? // CANCELACION, DEVOLUCION, etc.
+
+  // Dates
+  transactionDate     DateTime
+  liquidationDate     DateTime?
+
+  // Commission calculation
+  clientCommission    Float   @default(0)
+  netToClient         Float   @default(0)
+
+  // Filter flags
+  isExcluded          Boolean @default(false)
+  exclusionReason     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  terminalId String?
+  terminal   Terminal? @relation(fields: [terminalId], references: [id])
+
+  fileId String
+  file   FileControl @relation(fields: [fileId], references: [id])
+
+  reconciliations Reconciliation[]
+  payoutItems PayoutItem[]
+
+  @@unique([transactionId, authorizationNumber, transactionDate])
+  @@index([clientId])
+  @@index([terminalId])
+  @@index([fileId])
+  @@index([transactionDate])
+  @@index([authorizationNumber])
+  @@index([status])
+  @@index([isExcluded])
+  @@index([liquidationDate])
+  @@map("transactions")
+}
+
+model Settlement {
+  id                  String @id @default(uuid())
+  settlementId        String?
+  authorizationNumber String?
+  reference           String?
+
+  // Amounts
+  amount              Float
+  settledAmount       Float?
+
+  // Details
+  cardBrand           CardBrand
+  status              String?
+
+  // Dates
+  settlementDate      DateTime
+  transactionDate     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  terminalId String?
+  terminal   Terminal? @relation(fields: [terminalId], references: [id])
+
+  fileId String
+  file   FileControl @relation(fields: [fileId], references: [id])
+
+  reconciliations Reconciliation[]
+
+  @@unique([settlementId, authorizationNumber, settlementDate])
+  @@index([clientId])
+  @@index([terminalId])
+  @@index([fileId])
+  @@index([settlementDate])
+  @@index([authorizationNumber])
+  @@map("settlements")
+}
+
+model Reconciliation {
+  id       String @id @default(uuid())
+
+  // Matching criteria used
+  priorityUsed ReconciliationPriority
+  status       ReconciliationStatus
+
+  // Amount difference if mismatch
+  amountDifference Float?
+
+  // Notes
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+
+  settlementId String
+  settlement   Settlement @relation(fields: [settlementId], references: [id])
+
+  @@unique([transactionId, settlementId])
+  @@index([transactionId])
+  @@index([settlementId])
+  @@index([status])
+  @@map("reconciliations")
+}
+
+model Payout {
+  id          String @id @default(uuid())
+  payoutDate  DateTime
+
+  // Totals
+  totalAmount     Float
+  totalCommission Float
+  totalNet        Float
+
+  // Status
+  status PayoutStatus @default(PENDING)
+
+  // Payment info
+  paymentReference String?
+  paidAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  items PayoutItem[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([payoutDate])
+  @@map("payouts")
+}
+
+model PayoutItem {
+  id String @id @default(uuid())
+
+  // Amounts
+  grossAmount     Float
+  fee             Float
+  iva             Float
+  commission      Float
+  netAmount       Float
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  payoutId String
+  payout   Payout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+
+  transactionId String @unique
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+
+  @@index([payoutId])
+  @@index([transactionId])
+  @@map("payout_items")
+}

@@ -1,0 +1,4 @@
+export enum FileType {
+  TRANSACTIONS = 'TRANSACTIONS',
+  SETTLEMENTS = 'SETTLEMENTS',
+}
