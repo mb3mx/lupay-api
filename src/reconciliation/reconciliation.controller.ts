@@ -31,7 +31,7 @@ export class ReconciliationController {
 
   @Post()
   @ApiOperation({ summary: 'Run reconciliation for a client' })
-  async reconcile(@Body() reconcileDto: ReconcileDto) {
+  async reconcile(@Body() reconcileDto: ReconcileDto): Promise<any> {
     const result = await this.reconciliationService.reconcileClient(reconcileDto);
     return {
       data: result,

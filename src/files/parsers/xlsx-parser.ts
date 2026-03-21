@@ -63,8 +63,10 @@ export class XlsxParser {
           } else if (typeof cell.value === 'object') {
             // Handle rich text or other complex types
             value = cell.text;
+          } else if (typeof cell.value === 'boolean') {
+            value = cell.value ? 'true' : 'false';
           } else {
-            value = cell.value;
+            value = cell.value as any;
           }
 
           if (value !== undefined && value !== '') {

@@ -30,7 +30,7 @@ export class TransformInterceptor<T>
       map((data) => {
         // If data already has a specific structure, return as is
         if (data && typeof data === 'object' && 'success' in data) {
-          return data as Response<T>;
+          return data as unknown as Response<T>;
         }
 
         // Handle paginated responses

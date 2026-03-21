@@ -32,7 +32,7 @@ export class PayoutsController {
 
   @Post('generate')
   @ApiOperation({ summary: 'Generate a new payout' })
-  async generate(@Body() generatePayoutDto: GeneratePayoutDto) {
+  async generate(@Body() generatePayoutDto: GeneratePayoutDto): Promise<any> {
     const result = await this.payoutsService.generatePayout(generatePayoutDto);
     return {
       data: {

@@ -216,9 +216,9 @@ export class FilesService {
     clientId: string,
   ): Promise<void> {
     if (fileControl.fileType === FileType.TRANSACTIONS) {
-      await this.transactionsService.createFromRow(row, fileControl.id, clientId);
+      await this.transactionsService.createFromRow(row as any, fileControl.id, clientId);
     } else if (fileControl.fileType === FileType.SETTLEMENTS) {
-      await this.settlementsService.createFromRow(row, fileControl.id, clientId);
+      await this.settlementsService.createFromRow(row as any, fileControl.id, clientId);
     }
   }
 
