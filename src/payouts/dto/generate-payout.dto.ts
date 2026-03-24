@@ -4,7 +4,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class GeneratePayoutDto {
   @ApiProperty({ description: 'Client ID' })
   @IsUUID()
-  clientId: string;
+  clientId: any;
 
   @ApiProperty({ description: 'Payout date (YYYY-MM-DD)' })
   @IsDateString()

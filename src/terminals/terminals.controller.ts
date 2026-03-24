@@ -38,7 +38,7 @@ export class TerminalsController {
   async findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @Query('clientId') clientId?: string,
+    @Query('clientId') clientId?: any,
   ) {
     const skip = (page - 1) * limit;
     const where = clientId ? { clientId } : undefined;
@@ -62,7 +62,7 @@ export class TerminalsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get terminal by ID' })
   @ApiParam({ name: 'id', description: 'Terminal ID' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: any) {
     const terminal = await this.terminalsService.findById(id);
     return { data: terminal };
   }
@@ -78,7 +78,7 @@ export class TerminalsController {
   @ApiOperation({ summary: 'Update terminal' })
   @ApiParam({ name: 'id', description: 'Terminal ID' })
   async update(
-    @Param('id') id: string,
+    @Param('id') id: any,
     @Body() updateTerminalDto: UpdateTerminalDto,
   ) {
     const terminal = await this.terminalsService.update(id, updateTerminalDto);
@@ -88,7 +88,7 @@ export class TerminalsController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete terminal (soft delete)' })
   @ApiParam({ name: 'id', description: 'Terminal ID' })
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: any) {
     await this.terminalsService.delete(id);
     return { success: true };
   }

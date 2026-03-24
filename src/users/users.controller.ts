@@ -57,7 +57,7 @@ export class UsersController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get user by ID' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: any) {
     const user = await this.usersService.findById(id);
     if (!user) {
       return { data: null };

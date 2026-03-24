@@ -36,7 +36,7 @@ export class ClientsService {
     });
   }
 
-  async findById(id: string): Promise<Client | null> {
+  async findById(id: any): Promise<Client | null> {
     return this.prisma.client.findUnique({
       where: { id, isActive: true },
       include: {
@@ -69,7 +69,7 @@ export class ClientsService {
     }
   }
 
-  async update(id: string, data: UpdateClientDto): Promise<Client> {
+  async update(id: any, data: UpdateClientDto): Promise<Client> {
     try {
       return await this.prisma.client.update({
         where: { id },
@@ -91,7 +91,7 @@ export class ClientsService {
     }
   }
 
-  async delete(id: string): Promise<Client> {
+  async delete(id: any): Promise<Client> {
     try {
       // Soft delete
       return await this.prisma.client.update({

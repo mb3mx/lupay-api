@@ -71,7 +71,7 @@ export class ReconciliationService {
 
   private async reconcileTransaction(
     transaction: Transaction,
-    clientId: string,
+    clientId: any,
   ): Promise<{ status: ReconciliationStatus; reconciliation?: Reconciliation }> {
     // Priority 1: Match by authorization number
     if (transaction.authorizationNumber) {
@@ -225,7 +225,7 @@ export class ReconciliationService {
     };
   }
 
-  async findById(id: string): Promise<Reconciliation | null> {
+  async findById(id: any): Promise<Reconciliation | null> {
     return this.prisma.reconciliation.findUnique({
       where: { id },
       include: {
@@ -235,7 +235,7 @@ export class ReconciliationService {
     });
   }
 
-  async getReconciliationStats(clientId: string): Promise<{
+  async getReconciliationStats(clientId: any): Promise<{
     total: number;
     matched: number;
     notFound: number;
@@ -273,7 +273,7 @@ export class ReconciliationService {
     };
   }
 
-  async deleteReconciliation(id: string): Promise<void> {
+  async deleteReconciliation(id: any): Promise<void> {
     await this.prisma.reconciliation.delete({
       where: { id },
     });

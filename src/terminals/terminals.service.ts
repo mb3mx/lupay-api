@@ -43,7 +43,7 @@ export class TerminalsService {
     });
   }
 
-  async findById(id: string): Promise<Terminal | null> {
+  async findById(id: any): Promise<Terminal | null> {
     return this.prisma.terminal.findUnique({
       where: { id, isActive: true },
       include: {
@@ -93,7 +93,7 @@ export class TerminalsService {
     }
   }
 
-  async update(id: string, data: UpdateTerminalDto): Promise<Terminal> {
+  async update(id: any, data: UpdateTerminalDto): Promise<Terminal> {
     const updateData: Prisma.TerminalUpdateInput = {};
 
     if (data.serialNumber) updateData.serialNumber = data.serialNumber;
@@ -130,7 +130,7 @@ export class TerminalsService {
     }
   }
 
-  async delete(id: string): Promise<Terminal> {
+  async delete(id: any): Promise<Terminal> {
     try {
       return await this.prisma.terminal.update({
         where: { id },

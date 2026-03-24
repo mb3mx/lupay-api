@@ -124,7 +124,7 @@ export class FilesController {
   @Get(':id')
   @ApiOperation({ summary: 'Get file by ID' })
   @ApiParam({ name: 'id', description: 'File ID' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: any) {
     const file = await this.filesService.findById(id);
     return { data: file };
   }

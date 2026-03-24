@@ -4,27 +4,27 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class ReconcileDto {
   @ApiProperty({ description: 'Client ID to reconcile' })
   @IsUUID()
-  clientId: string;
+  clientId: any;
 
   @ApiPropertyOptional({ description: 'Specific transaction ID to reconcile' })
   @IsUUID()
   @IsOptional()
-  transactionId?: string;
+  transactionId?: any;
 
   @ApiPropertyOptional({ description: 'Specific settlement ID to reconcile' })
   @IsUUID()
   @IsOptional()
-  settlementId?: string;
+  settlementId?: any;
 }
 
 export class ManualReconcileDto {
   @ApiProperty({ description: 'Transaction ID' })
   @IsUUID()
-  transactionId: string;
+  transactionId: any;
 
   @ApiProperty({ description: 'Settlement ID' })
   @IsUUID()
-  settlementId: string;
+  settlementId: any;
 
   @ApiPropertyOptional({ description: 'Notes' })
   @IsString()

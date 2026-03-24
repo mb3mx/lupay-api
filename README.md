@@ -129,6 +129,7 @@ npm run db:generate
 
 # Run migrations
 npm run db:migrate
+#npx prisma db push
 
 # Seed database
 npm run db:seed

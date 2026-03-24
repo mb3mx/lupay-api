@@ -1,3 +1,4 @@
+(BigInt.prototype as any).toJSON = function() { return this.toString(); };
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';

@@ -31,7 +31,7 @@ export class TransactionsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get transaction by ID' })
   @ApiParam({ name: 'id', description: 'Transaction ID' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: any) {
     const transaction = await this.transactionsService.findById(id);
     return { data: transaction };
   }
@@ -39,7 +39,7 @@ export class TransactionsController {
   @Get('client/:clientId/unreconciled')
   @ApiOperation({ summary: 'Get unreconciled transactions for a client' })
   @ApiParam({ name: 'clientId', description: 'Client ID' })
-  async getUnreconciled(@Param('clientId') clientId: string) {
+  async getUnreconciled(@Param('clientId') clientId: any) {
     const transactions = await this.transactionsService.getUnreconciledTransactions(clientId);
     return { data: transactions };
   }

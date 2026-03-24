@@ -22,8 +22,8 @@ export class SettlementsService {
 
   async createFromRow(
     row: ParsedRow,
-    fileId: string,
-    clientId: string,
+    fileId: any,
+    clientId: any,
   ): Promise<Settlement> {
     // Normalize and extract fields from row
     const settlementId = this.extractField(row, [
@@ -167,7 +167,7 @@ export class SettlementsService {
     };
   }
 
-  async findById(id: string): Promise<Settlement | null> {
+  async findById(id: any): Promise<Settlement | null> {
     return this.prisma.settlement.findUnique({
       where: { id },
       include: {
@@ -183,7 +183,7 @@ export class SettlementsService {
     });
   }
 
-  async getUnreconciledSettlements(clientId: string): Promise<Settlement[]> {
+  async getUnreconciledSettlements(clientId: any): Promise<Settlement[]> {
     return this.prisma.settlement.findMany({
       where: {
         clientId,
@@ -197,7 +197,7 @@ export class SettlementsService {
 
   async findByAuthorizationNumber(
     authorizationNumber: string,
-    clientId: string,
+    clientId: any,
   ): Promise<Settlement | null> {
     return this.prisma.settlement.findFirst({
       where: {
@@ -211,8 +211,8 @@ export class SettlementsService {
   }
 
   async findBySettlementId(
-    settlementId: string,
-    clientId: string,
+    settlementId: any,
+    clientId: any,
   ): Promise<Settlement | null> {
     return this.prisma.settlement.findFirst({
       where: {
@@ -228,7 +228,7 @@ export class SettlementsService {
   async findByAmountAndDate(
     amount: number,
     settlementDate: Date,
-    clientId: string,
+    clientId: any,
     tolerance: number = 0.01,
   ): Promise<Settlement | null> {
     const startDate = new Date(settlementDate);

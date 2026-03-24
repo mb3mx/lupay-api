@@ -28,8 +28,8 @@ export class TransactionsService {
 
   async createFromRow(
     row: ParsedRow,
-    fileId: string,
-    clientId: string,
+    fileId: any,
+    clientId: any,
   ): Promise<Transaction> {
     // Normalize and extract fields from row
     const transactionId = this.extractField(row, ['transactionId', 'transaction_id', 'id', 'ID']);
@@ -261,7 +261,7 @@ export class TransactionsService {
     };
   }
 
-  async findById(id: string): Promise<Transaction | null> {
+  async findById(id: any): Promise<Transaction | null> {
     return this.prisma.transaction.findUnique({
       where: { id },
       include: {
@@ -280,7 +280,7 @@ export class TransactionsService {
     });
   }
 
-  async getUnreconciledTransactions(clientId: string): Promise<Transaction[]> {
+  async getUnreconciledTransactions(clientId: any): Promise<Transaction[]> {
     return this.prisma.transaction.findMany({
       where: {
         clientId,
@@ -293,7 +293,7 @@ export class TransactionsService {
     });
   }
 
-  async getTransactionsForPayout(clientId: string, payoutDate: Date): Promise<Transaction[]> {
+  async getTransactionsForPayout(clientId: any, payoutDate: Date): Promise<Transaction[]> {
     const startOfDay = new Date(payoutDate);
     startOfDay.setHours(0, 0, 0, 0);
 

@@ -66,7 +66,7 @@ export class ClientsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get client by ID' })
   @ApiParam({ name: 'id', description: 'Client ID' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: any) {
     const client = await this.clientsService.findById(id);
     return { data: client };
   }
@@ -81,7 +81,7 @@ export class ClientsController {
   @Patch(':id')
   @ApiOperation({ summary: 'Update client' })
   @ApiParam({ name: 'id', description: 'Client ID' })
-  async update(@Param('id') id: string, @Body() updateClientDto: UpdateClientDto) {
+  async update(@Param('id') id: any, @Body() updateClientDto: UpdateClientDto) {
     const client = await this.clientsService.update(id, updateClientDto);
     return { data: client };
   }
@@ -89,7 +89,7 @@ export class ClientsController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete client (soft delete)' })
   @ApiParam({ name: 'id', description: 'Client ID' })
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: any) {
     await this.clientsService.delete(id);
     return { success: true };
   }

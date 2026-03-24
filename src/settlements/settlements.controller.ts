@@ -32,7 +32,7 @@ export class SettlementsController {
   async findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @Query('clientId') clientId?: string,
+    @Query('clientId') clientId?: any,
   ) {
     const skip = (page - 1) * limit;
     const where = clientId ? { clientId } : undefined;
@@ -53,7 +53,7 @@ export class SettlementsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get settlement by ID' })
   @ApiParam({ name: 'id', description: 'Settlement ID' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: any) {
     const settlement = await this.settlementsService.findById(id);
     return { data: settlement };
   }
@@ -61,7 +61,7 @@ export class SettlementsController {
   @Get('client/:clientId/unreconciled')
   @ApiOperation({ summary: 'Get unreconciled settlements for a client' })
   @ApiParam({ name: 'clientId', description: 'Client ID' })
-  async getUnreconciled(@Param('clientId') clientId: string) {
+  async getUnreconciled(@Param('clientId') clientId: any) {
     const settlements = await this.settlementsService.getUnreconciledSettlements(clientId);
     return { data: settlements };
   }

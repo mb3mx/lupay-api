@@ -56,7 +56,7 @@ export class ReconciliationController {
   async findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @Query('clientId') clientId?: string,
+    @Query('clientId') clientId?: any,
     @Query('status') status?: ReconciliationStatus,
   ) {
     const skip = (page - 1) * limit;
@@ -85,7 +85,7 @@ export class ReconciliationController {
   @Get('stats/:clientId')
   @ApiOperation({ summary: 'Get reconciliation statistics for a client' })
   @ApiParam({ name: 'clientId', description: 'Client ID' })
-  async getStats(@Param('clientId') clientId: string) {
+  async getStats(@Param('clientId') clientId: any) {
     const stats = await this.reconciliationService.getReconciliationStats(clientId);
     return { data: stats };
   }
@@ -93,7 +93,7 @@ export class ReconciliationController {
   @Get(':id')
   @ApiOperation({ summary: 'Get reconciliation by ID' })
   @ApiParam({ name: 'id', description: 'Reconciliation ID' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: any) {
     const reconciliation = await this.reconciliationService.findById(id);
     return { data: reconciliation };
   }
@@ -101,7 +101,7 @@ export class ReconciliationController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a reconciliation' })
   @ApiParam({ name: 'id', description: 'Reconciliation ID' })
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: any) {
     await this.reconciliationService.deleteReconciliation(id);
     return { success: true };
   }

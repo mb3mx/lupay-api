@@ -140,7 +140,7 @@ export class PayoutsService {
   }
 
   async approvePayout(
-    payoutId: string,
+    payoutId: any,
     data: ApprovePayoutDto,
   ): Promise<Payout> {
     const payout = await this.prisma.payout.findUnique({
@@ -166,7 +166,7 @@ export class PayoutsService {
     });
   }
 
-  async markAsPaid(payoutId: string): Promise<Payout> {
+  async markAsPaid(payoutId: any): Promise<Payout> {
     const payout = await this.prisma.payout.findUnique({
       where: { id: payoutId },
     });
@@ -228,7 +228,7 @@ export class PayoutsService {
     };
   }
 
-  async findById(id: string): Promise<Payout | null> {
+  async findById(id: any): Promise<Payout | null> {
     return this.prisma.payout.findUnique({
       where: { id },
       include: {
@@ -260,7 +260,7 @@ export class PayoutsService {
     });
   }
 
-  async getPayoutSummary(clientId: string, startDate: Date, endDate: Date): Promise<{
+  async getPayoutSummary(clientId: any, startDate: Date, endDate: Date): Promise<{
     totalPayouts: number;
     totalAmount: number;
     totalCommission: number;
@@ -290,7 +290,7 @@ export class PayoutsService {
     };
   }
 
-  async deletePayout(id: string): Promise<void> {
+  async deletePayout(id: any): Promise<void> {
     const payout = await this.prisma.payout.findUnique({
       where: { id },
     });

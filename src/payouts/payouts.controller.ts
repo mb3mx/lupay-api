@@ -51,7 +51,7 @@ export class PayoutsController {
   async findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @Query('clientId') clientId?: string,
+    @Query('clientId') clientId?: any,
     @Query('status') status?: PayoutStatus,
   ) {
     const skip = (page - 1) * limit;
@@ -76,7 +76,7 @@ export class PayoutsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get payout by ID' })
   @ApiParam({ name: 'id', description: 'Payout ID' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: any) {
     const payout = await this.payoutsService.findById(id);
     return { data: payout };
   }
@@ -85,7 +85,7 @@ export class PayoutsController {
   @ApiOperation({ summary: 'Approve a payout' })
   @ApiParam({ name: 'id', description: 'Payout ID' })
   async approve(
-    @Param('id') id: string,
+    @Param('id') id: any,
     @Body() approvePayoutDto: ApprovePayoutDto,
   ) {
     const payout = await this.payoutsService.approvePayout(id, approvePayoutDto);
@@ -95,7 +95,7 @@ export class PayoutsController {
   @Patch(':id/pay')
   @ApiOperation({ summary: 'Mark payout as paid' })
   @ApiParam({ name: 'id', description: 'Payout ID' })
-  async markAsPaid(@Param('id') id: string) {
+  async markAsPaid(@Param('id') id: any) {
     const payout = await this.payoutsService.markAsPaid(id);
     return { data: payout };
   }
@@ -106,7 +106,7 @@ export class PayoutsController {
   @ApiQuery({ name: 'startDate', required: true, type: String })
   @ApiQuery({ name: 'endDate', required: true, type: String })
   async getSummary(
-    @Param('clientId') clientId: string,
+    @Param('clientId') clientId: any,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
   ) {
@@ -121,7 +121,7 @@ export class PayoutsController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a payout' })
   @ApiParam({ name: 'id', description: 'Payout ID' })
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: any) {
     await this.payoutsService.deletePayout(id);
     return { success: true };
   }

@@ -14,12 +14,12 @@ export class FilterTransactionsDto {
   @ApiPropertyOptional({ description: 'Client ID' })
   @IsUUID()
   @IsOptional()
-  clientId?: string;
+  clientId?: any;
 
   @ApiPropertyOptional({ description: 'Terminal ID' })
   @IsUUID()
   @IsOptional()
-  terminalId?: string;
+  terminalId?: any;
 
   @ApiPropertyOptional({ description: 'Card brand' })
   @IsEnum(CardBrand)
@@ -49,7 +49,7 @@ export class FilterTransactionsDto {
   @ApiPropertyOptional({ description: 'Transaction ID' })
   @IsString()
   @IsOptional()
-  transactionId?: string;
+  transactionId?: any;
 
   @ApiPropertyOptional({ description: 'Include excluded transactions' })
   @IsOptional()

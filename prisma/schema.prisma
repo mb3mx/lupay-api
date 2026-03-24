@@ -61,47 +61,47 @@ enum PayoutStatus {
 // ==================== MODELS ====================
 
 model User {
-  id        String   @id @default(uuid())
+  id        BigInt   @id @default(autoincrement())
   email     String   @unique
   password  String
-  firstName String
-  lastName  String
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
   role      UserRole @default(USER)
-  isActive  Boolean  @default(true)
+  isActive  Boolean  @default(true) @map("active")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
   uploadedFiles FileControl[]
 
   @@index([email])
   @@index([role])
-  @@map("users")
+  @@map("user")
 }
 
 model Client {
-  id               String @id @default(uuid())
+  id               BigInt @id @default(autoincrement())
   code             String @unique
   name             String
-  businessName     String
-  taxId            String @unique
-  commissionTotal  Float  @default(0) // Percentage
+  businessName     String @map("business_name")
+  taxId            String @unique @map("tax_id")
+  commissionTotal  Float  @default(0) @map("commission_total")
 
   // Contact
-  contactName      String?
-  contactEmail     String?
-  contactPhone     String?
+  contactName      String? @map("contact_name")
+  contactEmail     String? @map("contact_email")
+  contactPhone     String? @map("contact_phone")
 
   // Bank details for payouts
-  bankName         String?
-  bankAccount      String?
-  bankClabe        String?
+  bankName         String? @map("bank_name")
+  bankAccount      String? @map("bank_account")
+  bankClabe        String? @map("bank_clabe")
 
-  isActive         Boolean @default(true)
+  isActive         Boolean @default(true) @map("active")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
   terminals Terminal[]
@@ -111,21 +111,21 @@ model Client {
 
   @@index([code])
   @@index([taxId])
-  @@map("clients")
+  @@map("client")
 }
 
 model Terminal {
-  id            String @id @default(uuid())
-  serialNumber  String @unique
+  id            BigInt  @id @default(autoincrement())
+  serialNumber  String  @unique @map("serial_number")
   model         String
   location      String?
-  isActive      Boolean @default(true)
+  isActive      Boolean @default(true) @map("active")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  clientId String
+  clientId BigInt @map("client_id")
   client   Client @relation(fields: [clientId], references: [id])
 
   transactions Transaction[]
@@ -133,27 +133,27 @@ model Terminal {
 
   @@index([serialNumber])
   @@index([clientId])
-  @@map("terminals")
+  @@map("terminal")
 }
 
 model FileControl {
-  id              String     @id @default(uuid())
-  originalName    String
-  fileName        String     @unique
-  fileType        FileType
-  filePath        String
-  fileSize        Int
+  id              BigInt     @id @default(autoincrement())
+  originalName    String     @map("original_name")
+  fileName        String     @unique @map("file_name")
+  fileType        FileType   @map("file_type")
+  filePath        String     @map("file_path")
+  fileSize        Int        @map("file_size")
   status          FileStatus @default(PENDING)
-  recordCount     Int        @default(0)
-  processedCount  Int        @default(0)
-  errorMessage    String?
+  recordCount     Int        @default(0) @map("record_count")
+  processedCount  Int        @default(0) @map("processed_count")
+  errorMessage    String?    @map("error_message")
 
-  processedAt     DateTime?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  processedAt     DateTime?  @map("processed_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
 
   // Relations
-  uploadedBy String
+  uploadedBy BigInt @map("uploaded_by")
   uploader   User   @relation(fields: [uploadedBy], references: [id])
 
   transactions Transaction[]
@@ -162,13 +162,13 @@ model FileControl {
   @@index([fileType])
   @@index([status])
   @@index([uploadedBy])
-  @@map("file_controls")
+  @@map("file_control")
 }
 
 model Transaction {
-  id                  String @id @default(uuid())
-  transactionId       String? // From file
-  authorizationNumber String?
+  id                  BigInt @id @default(autoincrement())
+  transactionId       String? @map("transaction_id")
+  authorizationNumber String? @map("authorization_number")
   reference           String?
 
   // Amounts
@@ -177,34 +177,34 @@ model Transaction {
   iva                 Float   @default(0)
 
   // Transaction details
-  cardBrand           CardBrand
-  cardNumber          String? // Masked
+  cardBrand           CardBrand @map("card_brand")
+  cardNumber          String?   @map("card_number")
   status              TransactionStatus @default(ACTIVE)
-  operationType       String? // CANCELACION, DEVOLUCION, etc.
+  operationType       String?   @map("operation_type")
 
   // Dates
-  transactionDate     DateTime
-  liquidationDate     DateTime?
+  transactionDate     DateTime @map("transaction_date")
+  liquidationDate     DateTime? @map("liquidation_date")
 
   // Commission calculation
-  clientCommission    Float   @default(0)
-  netToClient         Float   @default(0)
+  clientCommission    Float   @default(0) @map("client_commission")
+  netToClient         Float   @default(0) @map("net_to_client")
 
   // Filter flags
-  isExcluded          Boolean @default(false)
-  exclusionReason     String?
+  isExcluded          Boolean @default(false) @map("is_excluded")
+  exclusionReason     String? @map("exclusion_reason")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  clientId String
+  clientId BigInt @map("client_id")
   client   Client @relation(fields: [clientId], references: [id])
 
-  terminalId String?
+  terminalId BigInt? @map("terminal_id")
   terminal   Terminal? @relation(fields: [terminalId], references: [id])
 
-  fileId String
+  fileId BigInt @map("file_id")
   file   FileControl @relation(fields: [fileId], references: [id])
 
   reconciliations Reconciliation[]
@@ -219,38 +219,38 @@ model Transaction {
   @@index([status])
   @@index([isExcluded])
   @@index([liquidationDate])
-  @@map("transactions")
+  @@map("transaction")
 }
 
 model Settlement {
-  id                  String @id @default(uuid())
-  settlementId        String?
-  authorizationNumber String?
+  id                  BigInt @id @default(autoincrement())
+  settlementId        String? @map("settlement_id")
+  authorizationNumber String? @map("authorization_number")
   reference           String?
 
   // Amounts
   amount              Float
-  settledAmount       Float?
+  settledAmount       Float? @map("settled_amount")
 
   // Details
-  cardBrand           CardBrand
+  cardBrand           CardBrand @map("card_brand")
   status              String?
 
   // Dates
-  settlementDate      DateTime
-  transactionDate     DateTime?
+  settlementDate      DateTime @map("settlement_date")
+  transactionDate     DateTime? @map("transaction_date")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  clientId String
+  clientId BigInt @map("client_id")
   client   Client @relation(fields: [clientId], references: [id])
 
-  terminalId String?
+  terminalId BigInt? @map("terminal_id")
   terminal   Terminal? @relation(fields: [terminalId], references: [id])
 
-  fileId String
+  fileId BigInt @map("file_id")
   file   FileControl @relation(fields: [fileId], references: [id])
 
   reconciliations Reconciliation[]
@@ -261,60 +261,60 @@ model Settlement {
   @@index([fileId])
   @@index([settlementDate])
   @@index([authorizationNumber])
-  @@map("settlements")
+  @@map("settlement")
 }
 
 model Reconciliation {
-  id       String @id @default(uuid())
+  id       BigInt @id @default(autoincrement())
 
   // Matching criteria used
-  priorityUsed ReconciliationPriority
+  priorityUsed ReconciliationPriority @map("priority_used")
   status       ReconciliationStatus
 
   // Amount difference if mismatch
-  amountDifference Float?
+  amountDifference Float? @map("amount_difference")
 
   // Notes
   notes String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  transactionId String
+  transactionId BigInt @map("transaction_id")
   transaction   Transaction @relation(fields: [transactionId], references: [id])
 
-  settlementId String
+  settlementId BigInt @map("settlement_id")
   settlement   Settlement @relation(fields: [settlementId], references: [id])
 
   @@unique([transactionId, settlementId])
   @@index([transactionId])
   @@index([settlementId])
   @@index([status])
-  @@map("reconciliations")
+  @@map("reconciliation")
 }
 
 model Payout {
-  id          String @id @default(uuid())
-  payoutDate  DateTime
+  id          BigInt @id @default(autoincrement())
+  payoutDate  DateTime @map("payout_date")
 
   // Totals
-  totalAmount     Float
-  totalCommission Float
-  totalNet        Float
+  totalAmount     Float @map("total_amount")
+  totalCommission Float @map("total_commission")
+  totalNet        Float @map("total_net")
 
   // Status
   status PayoutStatus @default(PENDING)
 
   // Payment info
-  paymentReference String?
-  paidAt          DateTime?
+  paymentReference String? @map("payment_reference")
+  paidAt          DateTime? @map("paid_at")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  clientId String
+  clientId BigInt @map("client_id")
   client   Client @relation(fields: [clientId], references: [id])
 
   items PayoutItem[]
@@ -322,29 +322,29 @@ model Payout {
   @@index([clientId])
   @@index([status])
   @@index([payoutDate])
-  @@map("payouts")
+  @@map("payout")
 }
 
 model PayoutItem {
-  id String @id @default(uuid())
+  id BigInt @id @default(autoincrement())
 
   // Amounts
-  grossAmount     Float
+  grossAmount     Float @map("gross_amount")
   fee             Float
   iva             Float
   commission      Float
-  netAmount       Float
+  netAmount       Float @map("net_amount")
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  payoutId String
+  payoutId BigInt @map("payout_id")
   payout   Payout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
 
-  transactionId String @unique
+  transactionId BigInt @unique @map("transaction_id")
   transaction   Transaction @relation(fields: [transactionId], references: [id])
 
   @@index([payoutId])
   @@index([transactionId])
-  @@map("payout_items")
+  @@map("payout_item")
 }

@@ -48,8 +48,8 @@ export class FilesService {
   async uploadFile(
     file: Express.Multer.File,
     fileType: FileType,
-    clientId: string,
-    userId: string,
+    clientId: any,
+    userId: any,
   ): Promise<FileUploadResult> {
     // Validate client exists
     const client = await this.clientsService.findById(clientId);
@@ -111,7 +111,7 @@ export class FilesService {
 
   private async processFile(
     fileControl: FileControl,
-    clientId: string,
+    clientId: any,
     fileExtension: string,
   ): Promise<number> {
     try {
@@ -164,7 +164,7 @@ export class FilesService {
 
   private async processCsvFile(
     fileControl: FileControl,
-    clientId: string,
+    clientId: any,
   ): Promise<number> {
     const parser = new CsvParser({ delimiter: ',', trim: true });
     const stream = fs.createReadStream(fileControl.filePath);
@@ -188,7 +188,7 @@ export class FilesService {
 
   private async processXlsxFile(
     fileControl: FileControl,
-    clientId: string,
+    clientId: any,
   ): Promise<number> {
     const parser = new XlsxParser();
     const stream = fs.createReadStream(fileControl.filePath);
@@ -213,7 +213,7 @@ export class FilesService {
   private async processRow(
     row: CsvRow | XlsxRow,
     fileControl: FileControl,
-    clientId: string,
+    clientId: any,
   ): Promise<void> {
     if (fileControl.fileType === FileType.TRANSACTIONS) {
       await this.transactionsService.createFromRow(row as any, fileControl.id, clientId);
@@ -241,7 +241,7 @@ export class FilesService {
     });
   }
 
-  async findById(id: string): Promise<FileControl | null> {
+  async findById(id: any): Promise<FileControl | null> {
     return this.prisma.fileControl.findUnique({
       where: { id },
       include: {

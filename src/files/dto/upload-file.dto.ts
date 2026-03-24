@@ -11,5 +11,5 @@ export class UploadFileDto {
   @ApiProperty({ description: 'Client ID for the file data' })
   @IsUUID()
   @IsNotEmpty()
-  clientId: string;
+  clientId: any;
 }
