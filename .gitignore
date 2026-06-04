@@ -8,3 +8,10 @@
 # dependencies
 /node_modules
 package-lock.json*
+# Logs temporales de desarrollo
+.log-api.txt
+.log-web.txt
+
+# Archivos subidos en runtime
+/uploads/*
+!/uploads/.gitkeep

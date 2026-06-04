@@ -13,6 +13,8 @@ import {
 } from '@prisma/client';
 import { FilterTransactionsDto } from './dto/filter-transactions.dto';
 import { ParsedRow } from '../files/parsers/csv-parser';
+import { TransaccionRow } from '../files/parsers/transacciones-parser';
+import { AmexRow } from '../files/parsers/amex-parser';
 
 // Excluded operation types
 const EXCLUDED_OPERATIONS = ['CANCELACION', 'DEVOLUCION', 'CANCELACIÓN', 'DEVOLUCIÓN'];
@@ -291,6 +293,52 @@ export class TransactionsService {
       },
       orderBy: { transactionDate: 'desc' },
     });
+  }
+
+  async createFromTransaccionRow(
+    row: TransaccionRow | AmexRow,
+    fileId: any,
+    clientId: any,
+  ): Promise<Transaction | null> {
+    const liquidationDate = this.calculateLiquidationDate(
+      row.transactionDate,
+      row.cardBrand,
+    );
+
+    try {
+      return await this.prisma.transaction.create({
+        data: {
+          transactionId: row.transactionId || undefined,
+          authorizationNumber: row.authorizationNumber || undefined,
+          reference: row.reference || undefined,
+          amount: row.amount,
+          fee: row.fee,
+          iva: row.iva,
+          importeLupay: row.importeLupay,
+          cardBrand: row.cardBrand,
+          cardNumber: row.cardNumber
+            ? this.maskCardNumber(row.cardNumber)
+            : undefined,
+          status: TransactionStatus.ACTIVE,
+          operationType: row.operationType,
+          tipoPago: row.tipoPago || undefined,
+          afiliacion: row.afiliacion || undefined,
+          merchantName: row.merchantName || undefined,
+          transactionDate: row.transactionDate,
+          liquidationDate,
+          clientCommission: 0,
+          netToClient: row.importeLupay || 0,
+          isExcluded: row.isExcluded,
+          exclusionReason: row.exclusionReason || undefined,
+          clientId,
+          fileId,
+        },
+      });
+    } catch (e) {
+      // Ignorar duplicados (unique constraint)
+      if (e?.code === 'P2002') return null;
+      throw e;
+    }
   }
 
   async getTransactionsForPayout(clientId: any, payoutDate: Date): Promise<Transaction[]> {

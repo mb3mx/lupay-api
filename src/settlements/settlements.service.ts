@@ -10,6 +10,7 @@ import {
   CardBrand,
 } from '@prisma/client';
 import { ParsedRow } from '../files/parsers/csv-parser';
+import { PosreRow } from '../files/parsers/posre-parser';
 
 @Injectable()
 export class SettlementsService {
@@ -136,6 +137,34 @@ export class SettlementsService {
     }
 
     return new Date();
+  }
+
+  async createFromPosreRow(
+    row: PosreRow,
+    fileId: any,
+    clientId: any,
+  ): Promise<Settlement | null> {
+    try {
+      return await this.prisma.settlement.create({
+        data: {
+          authorizationNumber: row.authorizationNumber || undefined,
+          amount: row.amount,
+          settledAmount: row.montoPagar ?? undefined,
+          montoPagar: row.montoPagar ?? undefined,
+          cardBrand: row.cardBrand,
+          status: row.isCancelled ? 'CANCELLED' : 'ACTIVE',
+          afiliacion: row.afiliacion || undefined,
+          settlementDate: row.settlementDate,
+          transactionDate: row.transactionDate,
+          reference: row.cardNumber || undefined,
+          clientId,
+          fileId,
+        },
+      });
+    } catch (e) {
+      if (e?.code === 'P2002') return null;
+      throw e;
+    }
   }
 
   async findAll(params: {

@@ -53,6 +53,13 @@ export class ClientsService {
     });
   }
 
+  async findByAfiliacion(afiliacion: string): Promise<Client | null> {
+    if (!afiliacion) return null;
+    return this.prisma.client.findFirst({
+      where: { afiliacion: afiliacion.trim(), isActive: true },
+    });
+  }
+
   async create(data: CreateClientDto): Promise<Client> {
     try {
       return await this.prisma.client.create({ data });

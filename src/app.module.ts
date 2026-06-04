@@ -10,6 +10,10 @@ import { SettlementsModule } from './settlements/settlements.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { PayoutsModule } from './payouts/payouts.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { LiquidacionModule } from './liquidacion/liquidacion.module';
+import { DevolucionesModule } from './devoluciones/devoluciones.module';
+import { ContracargosModule } from './contracargos/contracargos.module';
 
 @Module({
   imports: [
@@ -27,6 +31,10 @@ import { PrismaModule } from './prisma/prisma.module';
     SettlementsModule,
     ReconciliationModule,
     PayoutsModule,
+    DashboardModule,
+    LiquidacionModule,
+    DevolucionesModule,
+    ContracargosModule,
   ],
 })
 export class AppModule {}

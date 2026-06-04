@@ -33,9 +33,22 @@ export class ReconciliationController {
   @ApiOperation({ summary: 'Run reconciliation for a client' })
   async reconcile(@Body() reconcileDto: ReconcileDto): Promise<any> {
     const result = await this.reconciliationService.reconcileClient(reconcileDto);
-    return {
-      data: result,
-    };
+    return { data: result };
+  }
+
+  @Post('run-by-date')
+  @ApiOperation({ summary: 'Run reconciliation for a specific date' })
+  async reconcileByDate(@Body() body: { date: string }): Promise<any> {
+    const result = await this.reconciliationService.reconcileByDate(body.date);
+    return { data: result };
+  }
+
+  @Get('unmatched')
+  @ApiOperation({ summary: 'Get unmatched transactions for a date' })
+  @ApiQuery({ name: 'date', required: true, type: String })
+  async getUnmatched(@Query('date') date: string) {
+    const data = await this.reconciliationService.getUnmatchedByDate(date);
+    return { data };
   }
 
   @Post('manual')
@@ -45,6 +58,36 @@ export class ReconciliationController {
       manualReconcileDto,
     );
     return { data: reconciliation };
+  }
+
+  @Get('available-dates')
+  @ApiOperation({ summary: 'Get dates that have loaded transactions' })
+  async getAvailableDates() {
+    const data = await this.reconciliationService.getAvailableDates();
+    return { data };
+  }
+
+  @Get('results')
+  @ApiOperation({ summary: 'Get all transactions with reconciliation status' })
+  @ApiQuery({ name: 'dateFrom', required: false })
+  @ApiQuery({ name: 'dateTo', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  async getResults(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('status') status?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
+  ) {
+    return this.reconciliationService.getResults({
+      dateFrom,
+      dateTo,
+      status,
+      page,
+      limit,
+    });
   }
 
   @Get()

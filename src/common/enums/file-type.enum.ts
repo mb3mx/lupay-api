@@ -1,4 +1,5 @@
 export enum FileType {
   TRANSACTIONS = 'TRANSACTIONS',
   SETTLEMENTS = 'SETTLEMENTS',
+  AMEX = 'AMEX',
 }
