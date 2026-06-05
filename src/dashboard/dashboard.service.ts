@@ -174,47 +174,65 @@ export class DashboardService {
     const from = new Date(dateFrom + 'T00:00:00.000Z');
     const to = new Date(dateTo + 'T23:59:59.999Z');
 
-    const reconciliations = await this.prisma.reconciliation.findMany({
-      where: { transaction: { transactionDate: { gte: from, lte: to } } },
-      include: {
-        transaction: { include: { client: { select: { name: true, afiliacion: true } } } },
-        settlement: true,
+    // Traer TODAS las transacciones del rango con su reconciliation (si existe)
+    // Esto permite incluir los NOT_FOUND (sin registro en reconciliation)
+    const transactions = await this.prisma.transaction.findMany({
+      where: {
+        isExcluded: false,
+        transactionDate: { gte: from, lte: to },
       },
-      orderBy: { createdAt: 'asc' },
+      include: {
+        client: { select: { name: true, afiliacion: true } },
+        reconciliations: { include: { settlement: true }, take: 1 },
+      },
+      orderBy: { transactionDate: 'asc' },
     });
 
+    // Clasificar cada transacción en su hoja
+    const matched: any[] = [];
+    const notFound: any[] = [];
+    const mismatch: any[] = [];
+    for (const tx of transactions) {
+      const rec = tx.reconciliations[0];
+      const row = {
+        auth: tx.authorizationNumber ?? '',
+        tarjeta: tx.cardNumber ?? '',
+        cliente: tx.merchantName ?? tx.client?.name ?? '',
+        afiliacion: tx.afiliacion ?? tx.client?.afiliacion ?? '',
+        montoTx: tx.amount,
+        importeLupay: tx.importeLupay ?? 0,
+        importePosre: rec?.settlement?.amount ?? '',
+        diferencia: rec?.amountDifference ?? 0,
+        fecha: tx.transactionDate.toISOString().split('T')[0],
+      };
+      if (!rec) notFound.push(row);
+      else if (rec.status === 'AMOUNT_MISMATCH') mismatch.push(row);
+      else matched.push(row);
+    }
+
     const wb = new ExcelJS.Workbook();
-
-    const sheetDef = [
-      { name: 'Conciliadas', status: 'MATCHED' },
-      { name: 'Sin Match', status: 'NOT_FOUND' },
-      { name: 'Diferencias', status: 'AMOUNT_MISMATCH' },
-    ];
-
     const headers = [
       'Auth', 'Tarjeta', 'Cliente', 'Afiliación',
-      'Monto Tx', 'Importe POSRE', 'Diferencia', 'Fecha',
+      'Monto Tx', 'Importe Lupay', 'Importe POSRE', 'Diferencia', 'Fecha',
     ];
 
-    for (const { name, status } of sheetDef) {
+    const addSheet = (name: string, rows: any[]) => {
       const ws = wb.addWorksheet(name);
       ws.addRow(headers);
       ws.getRow(1).font = { bold: true };
-
-      for (const r of reconciliations.filter((rec) => rec.status === status)) {
-        const tx = r.transaction;
+      for (const r of rows) {
         ws.addRow([
-          tx.authorizationNumber ?? '',
-          tx.cardNumber ?? '',
-          tx.client.name,
-          tx.client.afiliacion ?? '',
-          tx.amount,
-          r.settlement?.amount ?? '',
-          r.amountDifference ?? 0,
-          tx.transactionDate.toISOString().split('T')[0],
+          r.auth, r.tarjeta, r.cliente, r.afiliacion,
+          r.montoTx, r.importeLupay, r.importePosre, r.diferencia, r.fecha,
         ]);
       }
-    }
+      // Auto-ajustar anchos
+      ws.columns.forEach((col) => { col.width = 15; });
+    };
+
+    addSheet('Conciliadas', matched);
+    addSheet('Sin Match',  notFound);
+    addSheet('Diferencias', mismatch);
 
     return wb.xlsx.writeBuffer() as unknown as Promise<Buffer>;
   }

@@ -143,9 +143,41 @@ export class SettlementsService {
     row: PosreRow,
     fileId: any,
     clientId: any,
-  ): Promise<Settlement | null> {
+  ): Promise<
+    | { kind: 'created'; record: Settlement }
+    | { kind: 'duplicate' }
+    | { kind: 'conflict'; existingAmount: number; newAmount: number; auth: string }
+  > {
+    // Verificar si ya existe un settlement con la misma identidad lógica:
+    // auth + cuenta + fecha liquidación + afiliación. Si existe:
+    //   - Mismo monto  → duplicado
+    //   - Monto distinto → conflicto
+    if (row.authorizationNumber) {
+      const existing = await this.prisma.settlement.findFirst({
+        where: {
+          authorizationNumber: row.authorizationNumber,
+          reference: row.cardNumber || undefined,
+          settlementDate: row.settlementDate,
+          afiliacion: row.afiliacion || undefined,
+        },
+        select: { id: true, amount: true },
+      });
+
+      if (existing) {
+        if (Math.abs(existing.amount - row.amount) > 0.01) {
+          return {
+            kind: 'conflict',
+            existingAmount: existing.amount,
+            newAmount: row.amount,
+            auth: row.authorizationNumber,
+          };
+        }
+        return { kind: 'duplicate' };
+      }
+    }
+
     try {
-      return await this.prisma.settlement.create({
+      const record = await this.prisma.settlement.create({
         data: {
           authorizationNumber: row.authorizationNumber || undefined,
           amount: row.amount,
@@ -161,8 +193,9 @@ export class SettlementsService {
           fileId,
         },
       });
+      return { kind: 'created', record };
     } catch (e) {
-      if (e?.code === 'P2002') return null;
+      if (e?.code === 'P2002') return { kind: 'duplicate' };
       throw e;
     }
   }

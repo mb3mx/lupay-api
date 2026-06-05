@@ -20,9 +20,24 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 
+export interface ConflictDetail {
+  auth: string;
+  old: number;
+  new: number;
+}
+
 interface FileUploadResult {
   fileControl: FileControl;
   recordsProcessed: number;
+  recordsInserted: number;
+  recordsDuplicated: number;
+  recordsConflicts: number;
+  conflictsSample: ConflictDetail[];
+  autoReconciliation?: {
+    matched: number;
+    amountMismatch: number;
+    notFound: number;
+  };
 }
 
 @Injectable()
@@ -64,9 +79,8 @@ export class FilesService {
     const fileName = `${uuidv4()}${fileExtension}`;
     const filePath = path.join(this.uploadPath, fileName);
 
-    // Idempotencia: si el mismo archivo (nombre + tipo) ya fue cargado,
-    // eliminar sus datos previos para reemplazarlos y evitar duplicados.
-    await this.removeExistingFileData(file.originalname, fileType);
+    // Nota: la deduplicación se hace por registro (no por archivo).
+    // Registros ya existentes se detectan y reportan como duplicados o conflictos.
 
     await this.saveFile(file, filePath);
 
@@ -92,50 +106,22 @@ export class FilesService {
       fileExtension,
     );
 
-    return { fileControl, recordsProcessed };
-  }
+    const autoReconciliation = (fileControl as any).__autoRecon;
+    const stats = (fileControl as any).__processStats ?? {
+      inserted: recordsProcessed,
+      duplicates: 0,
+      conflicts: [],
+    };
 
-  // Elimina datos de cargas previas del mismo archivo (idempotencia)
-  private async removeExistingFileData(
-    originalName: string,
-    fileType: FileType,
-  ): Promise<void> {
-    const prevFiles = await this.prisma.fileControl.findMany({
-      where: { originalName, fileType },
-      select: { id: true },
-    });
-    if (prevFiles.length === 0) return;
-
-    const fileIds = prevFiles.map((f) => f.id);
-
-    // Borrar reconciliations ligadas a transacciones/settlements de esos archivos
-    await this.prisma.reconciliation.deleteMany({
-      where: {
-        OR: [
-          { transaction: { fileId: { in: fileIds } } },
-          { settlement: { fileId: { in: fileIds } } },
-        ],
-      },
-    });
-
-    // Borrar items de liquidación/payout que referencien esas transacciones
-    await this.prisma.liquidacionItem.deleteMany({
-      where: { client: { transactions: { some: { fileId: { in: fileIds } } } } },
-    }).catch(() => undefined);
-    await this.prisma.payoutItem.deleteMany({
-      where: { transaction: { fileId: { in: fileIds } } },
-    }).catch(() => undefined);
-
-    // Borrar settlements y transacciones de esos archivos
-    await this.prisma.settlement.deleteMany({ where: { fileId: { in: fileIds } } });
-    await this.prisma.transaction.deleteMany({ where: { fileId: { in: fileIds } } });
-
-    // Borrar los registros de control de archivo
-    await this.prisma.fileControl.deleteMany({ where: { id: { in: fileIds } } });
-
-    this.logger.log(
-      `Reemplazando carga previa de "${originalName}" (${fileType}): ${fileIds.length} archivo(s) eliminado(s)`,
-    );
+    return {
+      fileControl,
+      recordsProcessed,
+      recordsInserted: stats.inserted,
+      recordsDuplicated: stats.duplicates,
+      recordsConflicts: stats.conflicts.length,
+      conflictsSample: stats.conflicts.slice(0, 10),
+      autoReconciliation,
+    };
   }
 
   private async saveFile(
@@ -200,12 +186,23 @@ export class FilesService {
         `File processed: ${fileControl.originalName} (${recordsProcessed} records)`,
       );
 
-      // Re-intentar conciliación de PEND al cargar nuevo POSRE
-      if (fileControl.fileType === FileType.SETTLEMENTS) {
-        this.retryPendingReconciliations(clientId).catch((e) =>
-          this.logger.warn(`PEND retry error: ${e.message}`),
-        );
+      // Auto-conciliación: ejecutar al cargar Transacciones O POSRE.
+      // AMEX no entra (no concilia contra POSRE).
+      let autoRecon = { matched: 0, amountMismatch: 0, notFound: 0 };
+      if (
+        fileControl.fileType === FileType.TRANSACTIONS ||
+        fileControl.fileType === FileType.SETTLEMENTS
+      ) {
+        try {
+          autoRecon = await this.runAutoReconciliation();
+        } catch (e: any) {
+          this.logger.warn(`Auto-reconciliacion error: ${e.message}`);
+        }
       }
+
+      // Guardamos el resultado en el fileControl para devolverlo desde
+      // el método que llamó a processFile.
+      (fileControl as any).__autoRecon = autoRecon;
 
       return recordsProcessed;
     } catch (error) {
@@ -228,10 +225,11 @@ export class FilesService {
     const isAmex = fileControl.fileType === FileType.AMEX;
     const parser = isAmex ? new AmexParser() : new TransaccionesParser();
 
-    let count = 0;
+    let inserted = 0;
+    let duplicates = 0;
+    const conflicts: ConflictDetail[] = [];
 
     for await (const row of parser.parse(fileControl.filePath)) {
-      // Auto-detectar clientId por afiliación si está disponible
       let resolvedClientId = clientId;
       if (row.afiliacion) {
         const clientByAfil = await this.clientsService.findByAfiliacion(
@@ -240,22 +238,43 @@ export class FilesService {
         if (clientByAfil) resolvedClientId = clientByAfil.id;
       }
 
-      await this.transactionsService.createFromTransaccionRow(
+      const result = await this.transactionsService.createFromTransaccionRow(
         row,
         fileControl.id,
         resolvedClientId,
       );
-      count++;
 
-      if (count % 100 === 0) {
+      if (result.kind === 'created') inserted++;
+      else if (result.kind === 'duplicate') duplicates++;
+      else if (result.kind === 'conflict') {
+        conflicts.push({
+          auth: result.auth,
+          old: result.existingAmount,
+          new: result.newAmount,
+        });
+      }
+
+      const total = inserted + duplicates + conflicts.length;
+      if (total % 100 === 0) {
         await this.prisma.fileControl.update({
           where: { id: fileControl.id },
-          data: { processedCount: count },
+          data: { processedCount: total },
         });
       }
     }
 
-    return count;
+    // Guardar stats para que uploadFile las devuelva
+    (fileControl as any).__processStats = { inserted, duplicates, conflicts };
+    await this.prisma.fileControl.update({
+      where: { id: fileControl.id },
+      data: {
+        insertedCount: inserted,
+        duplicateCount: duplicates,
+        conflictCount: conflicts.length,
+      },
+    });
+
+    return inserted + duplicates + conflicts.length;
   }
 
   private async processPosre(
@@ -263,10 +282,11 @@ export class FilesService {
     clientId: bigint,
   ): Promise<number> {
     const parser = new PosreParser();
-    let count = 0;
+    let inserted = 0;
+    let duplicates = 0;
+    const conflicts: ConflictDetail[] = [];
 
     for await (const row of parser.parse(fileControl.filePath)) {
-      // Auto-detectar clientId por afiliación
       let resolvedClientId = clientId;
       if (row.afiliacion) {
         const clientByAfil = await this.clientsService.findByAfiliacion(
@@ -275,63 +295,131 @@ export class FilesService {
         if (clientByAfil) resolvedClientId = clientByAfil.id;
       }
 
-      await this.settlementsService.createFromPosreRow(
+      const result = await this.settlementsService.createFromPosreRow(
         row,
         fileControl.id,
         resolvedClientId,
       );
-      count++;
 
-      if (count % 100 === 0) {
+      if (result.kind === 'created') inserted++;
+      else if (result.kind === 'duplicate') duplicates++;
+      else if (result.kind === 'conflict') {
+        conflicts.push({
+          auth: result.auth,
+          old: result.existingAmount,
+          new: result.newAmount,
+        });
+      }
+
+      const total = inserted + duplicates + conflicts.length;
+      if (total % 100 === 0) {
         await this.prisma.fileControl.update({
           where: { id: fileControl.id },
-          data: { processedCount: count },
+          data: { processedCount: total },
         });
       }
     }
 
-    return count;
+    (fileControl as any).__processStats = { inserted, duplicates, conflicts };
+    await this.prisma.fileControl.update({
+      where: { id: fileControl.id },
+      data: {
+        insertedCount: inserted,
+        duplicateCount: duplicates,
+        conflictCount: conflicts.length,
+      },
+    });
+
+    return inserted + duplicates + conflicts.length;
   }
 
-  // Re-intentar conciliación de transacciones PEND al llegar POSRE nuevo
-  private async retryPendingReconciliations(clientId: bigint): Promise<void> {
+  // Auto-conciliación con estrategia auth + tarjeta + monto.
+  // Se ejecuta al cargar Transacciones o POSRE para que el cruce sea inmediato.
+  private async runAutoReconciliation(): Promise<{
+    matched: number;
+    amountMismatch: number;
+    notFound: number;
+  }> {
     const pending = await this.prisma.transaction.findMany({
       where: {
-        clientId,
         isExcluded: false,
         reconciliations: { none: {} },
       },
-      select: { id: true, authorizationNumber: true, amount: true },
-      take: 500,
+      select: {
+        id: true,
+        authorizationNumber: true,
+        amount: true,
+        cardNumber: true,
+      },
     });
 
-    if (pending.length === 0) return;
-    this.logger.log(`Reintentando conciliación de ${pending.length} PEND...`);
+    if (pending.length === 0) {
+      return { matched: 0, amountMismatch: 0, notFound: 0 };
+    }
 
-    let retried = 0;
+    const TOLERANCE = 0.01;
+    const last4 = (v?: string | null) =>
+      (v || '').replace(/\D/g, '').slice(-4);
+
+    let matched = 0;
+    let amountMismatch = 0;
+
     for (const tx of pending) {
       if (!tx.authorizationNumber) continue;
-      const settlement = await this.prisma.settlement.findFirst({
+
+      const candidates = await this.prisma.settlement.findMany({
         where: {
           authorizationNumber: tx.authorizationNumber,
-          clientId,
           reconciliations: { none: {} },
         },
       });
-      if (settlement) {
+
+      if (candidates.length === 0) continue;
+
+      // Filtrar por tarjeta (últimos 4) — descarta colisiones de auth
+      const txCard = last4(tx.cardNumber);
+      const sameCardMatches = candidates.filter((s) => {
+        const sCard = last4(s.reference);
+        return txCard && sCard && txCard === sCard;
+      });
+
+      if (sameCardMatches.length === 0) continue;
+
+      const exact = sameCardMatches.find(
+        (s) => Math.abs(tx.amount - s.amount) <= TOLERANCE,
+      );
+
+      if (exact) {
         await this.prisma.reconciliation.create({
           data: {
             transactionId: tx.id,
-            settlementId: settlement.id,
+            settlementId: exact.id,
             priorityUsed: 'AUTHORIZATION_NUMBER',
             status: 'MATCHED',
           },
         });
-        retried++;
+        matched++;
+      } else {
+        const s = sameCardMatches[0];
+        await this.prisma.reconciliation.create({
+          data: {
+            transactionId: tx.id,
+            settlementId: s.id,
+            priorityUsed: 'AUTHORIZATION_NUMBER',
+            status: 'AMOUNT_MISMATCH',
+            amountDifference: Math.abs(tx.amount - s.amount),
+          },
+        });
+        amountMismatch++;
       }
     }
 
-    this.logger.log(`PEND reintento: ${retried} nuevas conciliaciones`);
+    const notFound = pending.length - matched - amountMismatch;
+    this.logger.log(
+      `Auto-conciliacion: ${matched} matched, ${amountMismatch} con diferencia, ${notFound} sin match (de ${pending.length} pendientes)`,
+    );
+
+    return { matched, amountMismatch, notFound };
   }
 
   // ── Métodos legacy para CSV y XLSX genérico ─────────────────────────────

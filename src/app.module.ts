@@ -14,6 +14,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { LiquidacionModule } from './liquidacion/liquidacion.module';
 import { DevolucionesModule } from './devoluciones/devoluciones.module';
 import { ContracargosModule } from './contracargos/contracargos.module';
+import { CancelacionesModule } from './cancelaciones/cancelaciones.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ContracargosModule } from './contracargos/contracargos.module';
     LiquidacionModule,
     DevolucionesModule,
     ContracargosModule,
+    CancelacionesModule,
   ],
 })
 export class AppModule {}

@@ -2,6 +2,7 @@ import * as ExcelJS from 'exceljs';
 import { CardBrand } from '@prisma/client';
 
 export interface TransaccionRow {
+  // Campos clave usados por el motor
   authorizationNumber: string | null;
   cardNumber: string | null;
   amount: number;
@@ -17,8 +18,25 @@ export interface TransaccionRow {
   reference: string | null;
   isExcluded: boolean;
   exclusionReason: string | null;
-  propina: number;
   merchantName: string | null;
+
+  // Campos del Excel preservados aunque no se usen en lógica de conciliación
+  adquiriente: string | null;
+  fiid: string | null;
+  hora: string | null;
+  modoEntrada: string | null;
+  metodoAutenticacion: string | null;
+  eci: string | null;
+  tipoTarjeta: string | null;
+  tasaComision: string | null;
+  tasaSobretasa: string | null;
+  montoSobretasa: number | null;
+  ivaSobretasa: number | null;
+  sucursal: string | null;
+  producto: string | null;
+  terminalSerial: string | null;
+  email: string | null;
+  propina: number | null;
 }
 
 function parseCardBrand(marca: string | null): CardBrand {
@@ -46,12 +64,24 @@ function parseDate(raw: unknown): Date {
   return new Date();
 }
 
+function cellStr(cell: ExcelJS.Cell): string | null {
+  const v = cell.value;
+  if (v === null || v === undefined || v === '') return null;
+  return String(v).trim();
+}
+
+function cellNum(cell: ExcelJS.Cell): number | null {
+  const v = cell.value;
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return isNaN(n) ? null : n;
+}
+
 export class TransaccionesParser {
   async *parse(filePath: string): AsyncGenerator<TransaccionRow> {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(filePath);
 
-    // Hoja puede tener espacio al final
     const ws =
       workbook.getWorksheet('Transacciones ') ||
       workbook.getWorksheet('Transacciones') ||
@@ -59,7 +89,7 @@ export class TransaccionesParser {
 
     if (!ws) throw new Error('Hoja Transacciones no encontrada');
 
-    // Leer headers de fila 1
+    // Headers en fila 1
     const headers: Record<number, string> = {};
     ws.getRow(1).eachCell((cell, col) => {
       if (cell.value) headers[col] = cell.value.toString().trim();
@@ -70,56 +100,87 @@ export class TransaccionesParser {
       return entry ? parseInt(entry[0]) : -1;
     };
 
-    const colAuth = idx('Número de autorización');
-    const colTarjeta = idx('Número de Tarjeta');
-    const colMonto = idx('Monto');
-    const colFecha = idx('Fecha');
-    const colTipo = idx('Tipo de Transacción');
-    const colMarca = idx('Marca de Tarjeta');
-    const colAfil = idx('Afiliación');
-    const colCom = idx('Monto Comisión Lupay');
-    const colIva = idx('IVA Comisión Lupay');
-    const colMetodo = idx('Método de Pago');
-    const colId = idx('ID');
-    const colRef = idx('Referencia');
-    const colPropina = idx('Propina');
-    const colCliente = idx('Cliente');
+    // Mapeo de TODAS las columnas
+    const C = {
+      id: idx('ID'),
+      adquiriente: idx('Adquiriente'),
+      afiliacion: idx('Afiliación'),
+      fiid: idx('FIID'),
+      cliente: idx('Cliente'),
+      marca: idx('Marca de Tarjeta'),
+      metodo: idx('Método de Pago'),
+      tarjeta: idx('Número de Tarjeta'),
+      monto: idx('Monto'),
+      fecha: idx('Fecha'),
+      hora: idx('Hora'),
+      tipo: idx('Tipo de Transacción'),
+      auth: idx('Número de autorización'),
+      modoEntrada: idx('Modo de Entrada'),
+      metodoAuth: idx('Metodo de Autenticación TH'),
+      eci: idx('ECI'),
+      tipoTarj: idx('Tipo de Tarjeta'),
+      tasaCom: idx('Tasa Comisión Lupay'),
+      montoCom: idx('Monto Comisión Lupay'),
+      ivaCom: idx('IVA Comisión Lupay'),
+      tasaSob: idx('Sobretasa Lupay'),
+      montoSob: idx('Monto Sobretasa Lupay'),
+      ivaSob: idx('IVA Sobretasa Lupay'),
+      sucursal: idx('Sucursal'),
+      producto: idx('Producto'),
+      terminal: idx('Terminal'),
+      ref: idx('Referencia'),
+      email: idx('Email'),
+      propina: idx('Propina'),
+    };
 
     for (let rowNum = 2; rowNum <= ws.rowCount; rowNum++) {
       const row = ws.getRow(rowNum);
 
-      const tipo = row.getCell(colTipo).value?.toString().trim() ?? '';
+      const tipo = cellStr(row.getCell(C.tipo)) ?? '';
       if (!tipo) continue;
 
-      const monto = Number(row.getCell(colMonto).value ?? 0);
-      const fee = Number(row.getCell(colCom).value ?? 0);
-      const iva = Number(row.getCell(colIva).value ?? 0);
-      const propina = Number(row.getCell(colPropina).value ?? 0);
+      const monto = cellNum(row.getCell(C.monto)) ?? 0;
+      const fee = cellNum(row.getCell(C.montoCom)) ?? 0;
+      const iva = cellNum(row.getCell(C.ivaCom)) ?? 0;
 
       const isExcluded = tipo.toUpperCase() !== 'PAGO';
 
       yield {
-        authorizationNumber:
-          row.getCell(colAuth).value?.toString().trim() || null,
-        cardNumber: row.getCell(colTarjeta).value?.toString().trim() || null,
+        // Campos clave
+        authorizationNumber: cellStr(row.getCell(C.auth)),
+        cardNumber: cellStr(row.getCell(C.tarjeta)),
         amount: monto,
         fee,
         iva,
         importeLupay: Math.round((monto - fee - iva) * 100) / 100,
-        cardBrand: parseCardBrand(
-          row.getCell(colMarca).value?.toString() || null,
-        ),
-        tipoPago: row.getCell(colMetodo).value?.toString().trim() || null,
+        cardBrand: parseCardBrand(cellStr(row.getCell(C.marca))),
+        tipoPago: cellStr(row.getCell(C.metodo)),
         operationType: tipo,
-        transactionDate: parseDate(row.getCell(colFecha).value),
-        afiliacion: row.getCell(colAfil).value?.toString().trim() || null,
-        transactionId:
-          row.getCell(colId).value?.toString().trim() || null,
-        reference: row.getCell(colRef).value?.toString().trim() || null,
+        transactionDate: parseDate(row.getCell(C.fecha).value),
+        afiliacion: cellStr(row.getCell(C.afiliacion)),
+        transactionId: cellStr(row.getCell(C.id)),
+        reference: cellStr(row.getCell(C.ref)),
         isExcluded,
         exclusionReason: isExcluded ? tipo : null,
-        propina,
-        merchantName: row.getCell(colCliente).value?.toString().trim() || null,
+        merchantName: cellStr(row.getCell(C.cliente)),
+
+        // Campos preservados del Excel
+        adquiriente: cellStr(row.getCell(C.adquiriente)),
+        fiid: cellStr(row.getCell(C.fiid)),
+        hora: cellStr(row.getCell(C.hora)),
+        modoEntrada: cellStr(row.getCell(C.modoEntrada)),
+        metodoAutenticacion: cellStr(row.getCell(C.metodoAuth)),
+        eci: cellStr(row.getCell(C.eci)),
+        tipoTarjeta: cellStr(row.getCell(C.tipoTarj)),
+        tasaComision: cellStr(row.getCell(C.tasaCom)),
+        tasaSobretasa: cellStr(row.getCell(C.tasaSob)),
+        montoSobretasa: cellNum(row.getCell(C.montoSob)),
+        ivaSobretasa: cellNum(row.getCell(C.ivaSob)),
+        sucursal: cellStr(row.getCell(C.sucursal)),
+        producto: cellStr(row.getCell(C.producto)),
+        terminalSerial: cellStr(row.getCell(C.terminal)),
+        email: cellStr(row.getCell(C.email)),
+        propina: cellNum(row.getCell(C.propina)),
       };
     }
   }

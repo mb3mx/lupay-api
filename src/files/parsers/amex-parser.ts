@@ -18,6 +18,24 @@ export interface AmexRow {
   isExcluded: boolean;
   exclusionReason: string | null;
   merchantName: string | null;
+
+  // Campos preservados (opcionales — AMEX puede no tener todos)
+  adquiriente?: string | null;
+  fiid?: string | null;
+  hora?: string | null;
+  modoEntrada?: string | null;
+  metodoAutenticacion?: string | null;
+  eci?: string | null;
+  tipoTarjeta?: string | null;
+  tasaComision?: string | null;
+  tasaSobretasa?: string | null;
+  montoSobretasa?: number | null;
+  ivaSobretasa?: number | null;
+  sucursal?: string | null;
+  producto?: string | null;
+  terminalSerial?: string | null;
+  email?: string | null;
+  propina?: number | null;
 }
 
 function parseDate(raw: unknown): Date {

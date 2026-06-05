@@ -299,14 +299,50 @@ export class TransactionsService {
     row: TransaccionRow | AmexRow,
     fileId: any,
     clientId: any,
-  ): Promise<Transaction | null> {
+  ): Promise<
+    | { kind: 'created'; record: Transaction }
+    | { kind: 'duplicate' }
+    | { kind: 'conflict'; existingAmount: number; newAmount: number; auth: string }
+  > {
     const liquidationDate = this.calculateLiquidationDate(
       row.transactionDate,
       row.cardBrand,
     );
 
+    // Verificar si ya existe un registro con la misma identidad lógica
+    // (mismo auth + tarjeta + fecha + afiliación). Si existe:
+    //   - Mismo monto  → duplicado (ignorar)
+    //   - Monto distinto → conflicto (reportar, no insertar)
+    const maskedCard = row.cardNumber
+      ? this.maskCardNumber(row.cardNumber)
+      : null;
+
+    if (row.authorizationNumber && maskedCard) {
+      const existing = await this.prisma.transaction.findFirst({
+        where: {
+          authorizationNumber: row.authorizationNumber,
+          cardNumber: maskedCard,
+          transactionDate: row.transactionDate,
+          afiliacion: row.afiliacion || undefined,
+        },
+        select: { id: true, amount: true },
+      });
+
+      if (existing) {
+        if (Math.abs(existing.amount - row.amount) > 0.01) {
+          return {
+            kind: 'conflict',
+            existingAmount: existing.amount,
+            newAmount: row.amount,
+            auth: row.authorizationNumber,
+          };
+        }
+        return { kind: 'duplicate' };
+      }
+    }
+
     try {
-      return await this.prisma.transaction.create({
+      const record = await this.prisma.transaction.create({
         data: {
           transactionId: row.transactionId || undefined,
           authorizationNumber: row.authorizationNumber || undefined,
@@ -324,6 +360,23 @@ export class TransactionsService {
           tipoPago: row.tipoPago || undefined,
           afiliacion: row.afiliacion || undefined,
           merchantName: row.merchantName || undefined,
+          // Campos preservados del Excel completo
+          adquiriente: row.adquiriente || undefined,
+          fiid: row.fiid || undefined,
+          hora: row.hora || undefined,
+          modoEntrada: row.modoEntrada || undefined,
+          metodoAutenticacion: row.metodoAutenticacion || undefined,
+          eci: row.eci || undefined,
+          tipoTarjeta: row.tipoTarjeta || undefined,
+          tasaComision: row.tasaComision || undefined,
+          tasaSobretasa: row.tasaSobretasa || undefined,
+          montoSobretasa: row.montoSobretasa ?? undefined,
+          ivaSobretasa: row.ivaSobretasa ?? undefined,
+          sucursal: row.sucursal || undefined,
+          producto: row.producto || undefined,
+          terminalSerial: row.terminalSerial || undefined,
+          email: row.email || undefined,
+          propina: row.propina ?? undefined,
           transactionDate: row.transactionDate,
           liquidationDate,
           clientCommission: 0,
@@ -334,9 +387,10 @@ export class TransactionsService {
           fileId,
         },
       });
+      return { kind: 'created', record };
     } catch (e) {
-      // Ignorar duplicados (unique constraint)
-      if (e?.code === 'P2002') return null;
+      // Si por alguna razón pasa el constraint único, lo tratamos como duplicado
+      if (e?.code === 'P2002') return { kind: 'duplicate' };
       throw e;
     }
   }

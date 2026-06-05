@@ -92,6 +92,11 @@ export class FilesController {
         fileType: result.fileControl.fileType,
         status: result.fileControl.status,
         recordsProcessed: result.recordsProcessed,
+        recordsInserted: result.recordsInserted,
+        recordsDuplicated: result.recordsDuplicated,
+        recordsConflicts: result.recordsConflicts,
+        conflictsSample: result.conflictsSample,
+        autoReconciliation: result.autoReconciliation,
       },
     };
   }
