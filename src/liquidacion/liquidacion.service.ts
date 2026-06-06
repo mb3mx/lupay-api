@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as ExcelJS from 'exceljs';
 
@@ -6,9 +6,40 @@ import * as ExcelJS from 'exceljs';
 export class LiquidacionService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async generate(fecha: string) {
+  async generate(fecha: string, force = false) {
     const from = new Date(fecha + 'T00:00:00.000Z');
     const to = new Date(fecha + 'T23:59:59.999Z');
+
+    // Bloquear duplicados: solo se permite una activa por fecha
+    const existing = await this.prisma.liquidacion.findFirst({
+      where: { fecha: from, status: { not: 'CANCELADA' } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existing) {
+      if (existing.status !== 'CALCULADA') {
+        throw new ConflictException({
+          code: 'LIQUIDACION_APPROVED',
+          message: `Ya existe una liquidación ${existing.status} para esta fecha. No puede regenerarse.`,
+          existingId: existing.id.toString(),
+          existingStatus: existing.status,
+        });
+      }
+      if (!force) {
+        throw new ConflictException({
+          code: 'LIQUIDACION_EXISTS',
+          message: 'Ya existe una liquidación calculada para esta fecha.',
+          existingId: existing.id.toString(),
+          existingStatus: existing.status,
+          existingTotalNeto: existing.totalNeto,
+        });
+      }
+      // force=true: cancelar la previa antes de crear la nueva
+      await this.prisma.liquidacion.update({
+        where: { id: existing.id },
+        data: { status: 'CANCELADA' },
+      });
+    }
 
     // Obtener transacciones conciliadas del día
     const transactions = await this.prisma.transaction.findMany({
@@ -140,9 +171,31 @@ export class LiquidacionService {
     };
   }
 
-  async findAll() {
+  async cancel(id: bigint) {
+    const liq = await this.prisma.liquidacion.findUnique({ where: { id } });
+    if (!liq) throw new NotFoundException('Liquidación no encontrada');
+    if (liq.status === 'CANCELADA') {
+      throw new ConflictException({
+        code: 'ALREADY_CANCELLED',
+        message: 'La liquidación ya está cancelada.',
+      });
+    }
+    if (liq.status !== 'CALCULADA') {
+      throw new ConflictException({
+        code: 'CANNOT_CANCEL',
+        message: `No puede cancelarse una liquidación ${liq.status}.`,
+      });
+    }
+    return this.prisma.liquidacion.update({
+      where: { id },
+      data: { status: 'CANCELADA' },
+    });
+  }
+
+  async findAll(includeCancelled = false) {
     return this.prisma.liquidacion.findMany({
-      orderBy: { fecha: 'desc' },
+      where: includeCancelled ? undefined : { status: { not: 'CANCELADA' } },
+      orderBy: [{ fecha: 'desc' }, { createdAt: 'desc' }],
       include: { _count: { select: { items: true } } },
     });
   }

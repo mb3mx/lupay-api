@@ -507,6 +507,10 @@ export class FilesService {
     });
   }
 
+  async countAll(where?: any): Promise<number> {
+    return this.prisma.fileControl.count({ where });
+  }
+
   async findById(id: any): Promise<FileControl | null> {
     return this.prisma.fileControl.findUnique({
       where: { id },

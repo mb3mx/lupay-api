@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Body, Res, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, Res, UseGuards, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -13,15 +13,15 @@ export class LiquidacionController {
 
   @Post('generate')
   @ApiOperation({ summary: 'Generate liquidation for a date' })
-  async generate(@Body() body: { fecha: string }) {
-    const data = await this.liquidacionService.generate(body.fecha);
+  async generate(@Body() body: { fecha: string; force?: boolean }) {
+    const data = await this.liquidacionService.generate(body.fecha, !!body.force);
     return { data };
   }
 
   @Get()
   @ApiOperation({ summary: 'List all liquidations' })
-  async findAll() {
-    const data = await this.liquidacionService.findAll();
+  async findAll(@Query('includeCancelled') includeCancelled?: string) {
+    const data = await this.liquidacionService.findAll(includeCancelled === 'true');
     return { data };
   }
 
@@ -29,6 +29,13 @@ export class LiquidacionController {
   @ApiOperation({ summary: 'Get liquidation detail' })
   async findOne(@Param('id') id: string) {
     const data = await this.liquidacionService.findById(BigInt(id));
+    return { data };
+  }
+
+  @Post(':id/cancel')
+  @ApiOperation({ summary: 'Cancel a CALCULADA liquidation (soft delete)' })
+  async cancel(@Param('id') id: string) {
+    const data = await this.liquidacionService.cancel(BigInt(id));
     return { data };
   }
 

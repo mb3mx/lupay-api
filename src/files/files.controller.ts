@@ -114,14 +114,17 @@ export class FilesController {
     const skip = (page - 1) * limit;
     const where = fileType ? { fileType } : undefined;
 
-    const files = await this.filesService.findAll({ skip, take: limit, where });
+    const [files, total] = await Promise.all([
+      this.filesService.findAll({ skip, take: limit, where }),
+      this.filesService.countAll(where),
+    ]);
 
     return {
       data: files,
       meta: {
         page,
         limit,
-        total: files.length,
+        total,
       },
     };
   }

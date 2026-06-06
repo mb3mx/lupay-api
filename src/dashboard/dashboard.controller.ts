@@ -33,6 +33,21 @@ export class DashboardController {
     return { data };
   }
 
+  @Get('range')
+  @ApiOperation({
+    summary:
+      'Get breakdown over a date range (hourly if same day, daily otherwise)',
+  })
+  @ApiQuery({ name: 'dateFrom', required: true })
+  @ApiQuery({ name: 'dateTo', required: true })
+  async getRange(
+    @Query('dateFrom') dateFrom: string,
+    @Query('dateTo') dateTo: string,
+  ) {
+    const data = await this.dashboardService.getRange(dateFrom, dateTo);
+    return { data };
+  }
+
   @Get('monthly')
   @ApiOperation({ summary: 'Get monthly breakdown with comparison' })
   @ApiQuery({ name: 'year', required: true })
@@ -49,19 +64,22 @@ export class DashboardController {
   @ApiOperation({ summary: 'Export reconciliation report to Excel' })
   @ApiQuery({ name: 'dateFrom', required: true })
   @ApiQuery({ name: 'dateTo', required: true })
+  @ApiQuery({ name: 'status', required: false, enum: ['MATCHED', 'NOT_FOUND', 'AMOUNT_MISMATCH'] })
   async export(
     @Query('dateFrom') dateFrom: string,
     @Query('dateTo') dateTo: string,
+    @Query('status') status: string | undefined,
     @Res() res: Response,
   ) {
-    const buffer = await this.dashboardService.exportReport(dateFrom, dateTo);
+    const buffer = await this.dashboardService.exportReport(dateFrom, dateTo, status);
+    const suffix = status ? `_${status.toLowerCase()}` : '';
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="conciliacion_${dateFrom}_${dateTo}.xlsx"`,
+      `attachment; filename="conciliacion_${dateFrom}_${dateTo}${suffix}.xlsx"`,
     );
     res.send(buffer);
   }

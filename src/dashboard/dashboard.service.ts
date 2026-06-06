@@ -41,15 +41,46 @@ export class DashboardService {
 
     const montoTotal = montoAgg._sum.amount ?? 0;
     const pctMatch = totalTx > 0 ? (totalMatched / totalTx) * 100 : 0;
-
-    // Sin match = transacciones que NO tienen una conciliación MATCHED.
-    // El motor solo persiste registros MATCHED, por lo que los NOT_FOUND
-    // se calculan como (total − conciliadas − con diferencia).
     const sinMatch = Math.max(0, totalTx - totalMatched - totalMismatch);
+
+    // Calcular Monto Total Lupay (ingreso del sistema desde el procesador) y
+    // Ganancias (comisión propia del sistema sobre cada negocio = COM CTE).
+    // Para Ganancias hay que multiplicar el IMPORTE LUPAY de cada negocio
+    // por su % de comisión definido en client.commissionTotal.
+    const byMerchant = await this.prisma.transaction.groupBy({
+      by: ['merchantName'],
+      where: { isExcluded: false, transactionDate: { gte: from, lte: to } },
+      _sum: { importeLupay: true },
+    });
+
+    const merchantNames = byMerchant
+      .map((g) => g.merchantName)
+      .filter((n): n is string => !!n);
+
+    const clientsByName = merchantNames.length
+      ? await this.prisma.client.findMany({
+          where: { name: { in: merchantNames } },
+          select: { name: true, commissionTotal: true },
+        })
+      : [];
+    const commByName = new Map(
+      clientsByName.map((c) => [c.name, c.commissionTotal]),
+    );
+
+    let montoTotalLupay = 0;
+    let ganancias = 0;
+    for (const g of byMerchant) {
+      const il = g._sum.importeLupay ?? 0;
+      montoTotalLupay += il;
+      const comm = commByName.get(g.merchantName ?? '') ?? 0;
+      ganancias += il * comm;
+    }
 
     return {
       totalTransacciones: totalTx,
       montoTotal: Math.round(montoTotal * 100) / 100,
+      montoTotalLupay: Math.round(montoTotalLupay * 100) / 100,
+      ganancias: Math.round(ganancias * 100) / 100,
       totalConciliadas: totalMatched,
       totalNoMatch: sinMatch,
       totalDiferencia: totalMismatch,
@@ -57,15 +88,18 @@ export class DashboardService {
     };
   }
 
-  async getDaily(date: string) {
-    const from = new Date(date + 'T00:00:00.000Z');
-    const to = new Date(date + 'T23:59:59.999Z');
+  // Devuelve datos del Dashboard agregados según la granularidad del rango:
+  // - Si dateFrom === dateTo  → buckets por HORA (24 entradas)
+  // - Si dateFrom !== dateTo  → buckets por DÍA
+  async getRange(dateFrom: string, dateTo: string) {
+    const from = new Date(dateFrom + 'T00:00:00.000Z');
+    const to = new Date(dateTo + 'T23:59:59.999Z');
+    const isSingleDay = dateFrom === dateTo;
 
     const transactions = await this.prisma.transaction.findMany({
       where: { isExcluded: false, transactionDate: { gte: from, lte: to } },
       select: {
         amount: true,
-        importeLupay: true,
         cardBrand: true,
         transactionDate: true,
         merchantName: true,
@@ -74,22 +108,32 @@ export class DashboardService {
       },
     });
 
-    // Por hora
-    const porHora: Record<number, { monto: number; count: number; conciliadas: number }> = {};
-    for (let h = 0; h < 24; h++) porHora[h] = { monto: 0, count: 0, conciliadas: 0 };
+    // Buckets por hora o por día
+    const buckets: Record<
+      string,
+      { monto: number; count: number; conciliadas: number }
+    > = {};
 
-    // Por cardBrand
+    if (isSingleDay) {
+      for (let h = 0; h < 24; h++) {
+        buckets[String(h)] = { monto: 0, count: 0, conciliadas: 0 };
+      }
+    }
+
     const porBrand: Record<string, { monto: number; count: number }> = {};
-
-    // Por negocio
     const porNegocio: Record<string, { monto: number; count: number }> = {};
 
     for (const tx of transactions) {
-      const hora = new Date(tx.transactionDate).getHours();
-      porHora[hora].monto += tx.amount;
-      porHora[hora].count++;
-      const isMatched = tx.reconciliations.some((r) => r.status === 'MATCHED');
-      if (isMatched) porHora[hora].conciliadas++;
+      const d = new Date(tx.transactionDate);
+      const key = isSingleDay
+        ? String(d.getUTCHours())
+        : d.toISOString().split('T')[0];
+      buckets[key] = buckets[key] || { monto: 0, count: 0, conciliadas: 0 };
+      buckets[key].monto += tx.amount;
+      buckets[key].count++;
+      if (tx.reconciliations.some((r) => r.status === 'MATCHED')) {
+        buckets[key].conciliadas++;
+      }
 
       const brand = tx.cardBrand;
       porBrand[brand] = porBrand[brand] || { monto: 0, count: 0 };
@@ -102,16 +146,28 @@ export class DashboardService {
       porNegocio[neg].count++;
     }
 
+    const timeSeries = Object.entries(buckets)
+      .map(([key, v]) => ({ key, ...v }))
+      .sort((a, b) =>
+        a.key.localeCompare(b.key, undefined, { numeric: true }),
+      );
+
     const top5Negocios = Object.entries(porNegocio)
       .map(([nombre, v]) => ({ nombre, ...v }))
       .sort((a, b) => b.monto - a.monto)
       .slice(0, 5);
 
     return {
-      porHora: Object.entries(porHora).map(([hora, v]) => ({ hora: +hora, ...v })),
+      granularity: isSingleDay ? 'hour' : 'day',
+      timeSeries,
       porCardBrand: Object.entries(porBrand).map(([brand, v]) => ({ brand, ...v })),
       top5Negocios,
     };
+  }
+
+  // Wrapper para compatibilidad
+  async getDaily(date: string) {
+    return this.getRange(date, date);
   }
 
   async getMonthly(year: number, month: number) {
@@ -170,7 +226,11 @@ export class DashboardService {
     };
   }
 
-  async exportReport(dateFrom: string, dateTo: string): Promise<Buffer> {
+  async exportReport(
+    dateFrom: string,
+    dateTo: string,
+    status?: string,
+  ): Promise<Buffer> {
     const from = new Date(dateFrom + 'T00:00:00.000Z');
     const to = new Date(dateTo + 'T23:59:59.999Z');
 
@@ -230,9 +290,18 @@ export class DashboardService {
       ws.columns.forEach((col) => { col.width = 15; });
     };
 
-    addSheet('Conciliadas', matched);
-    addSheet('Sin Match',  notFound);
-    addSheet('Diferencias', mismatch);
+    // Si hay filtro de estado, exportar solo esa hoja; sino, las 3
+    if (status === 'MATCHED') {
+      addSheet('Conciliadas', matched);
+    } else if (status === 'NOT_FOUND') {
+      addSheet('Sin Match', notFound);
+    } else if (status === 'AMOUNT_MISMATCH') {
+      addSheet('Diferencias', mismatch);
+    } else {
+      addSheet('Conciliadas', matched);
+      addSheet('Sin Match', notFound);
+      addSheet('Diferencias', mismatch);
+    }
 
     return wb.xlsx.writeBuffer() as unknown as Promise<Buffer>;
   }

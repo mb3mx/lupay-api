@@ -12,5 +12,6 @@ export class AuthResponseDto {
     firstName: string;
     lastName: string;
     role: UserRole;
+    avatarUrl?: string | null;
   };
 }
