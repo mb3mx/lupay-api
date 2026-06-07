@@ -13,5 +13,6 @@ export class AuthResponseDto {
     lastName: string;
     role: UserRole;
     avatarUrl?: string | null;
+    clientId?: string | null;
   };
 }

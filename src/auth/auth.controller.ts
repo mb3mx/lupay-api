@@ -1,10 +1,20 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Get,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SocialLoginDto } from './dto/social-login.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { GetUser } from '../common/decorators/get-user.decorator';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -41,5 +51,14 @@ export class AuthController {
   @ApiOperation({ summary: 'Login con Facebook (accessToken del cliente)' })
   async facebook(@Body() dto: SocialLoginDto): Promise<AuthResponseDto> {
     return this.authService.loginWithFacebook(dto.token);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Datos del usuario autenticado (incluye client si aplica)' })
+  @ApiResponse({ status: 200, description: 'Perfil del usuario' })
+  async me(@GetUser() user: { userId: string }) {
+    return this.authService.getMe(user.userId);
   }
 }

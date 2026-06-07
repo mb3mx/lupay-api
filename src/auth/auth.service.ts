@@ -18,6 +18,7 @@ interface JwtPayload {
   sub: string;
   email: string;
   role: string;
+  clientId?: string | null;
 }
 
 @Injectable()
@@ -195,10 +196,12 @@ export class AuthService {
   }
 
   private buildAuthResponse(user: any): AuthResponseDto {
+    const clientIdStr = user.clientId != null ? String(user.clientId) : null;
     const payload: JwtPayload = {
       sub: String(user.id),
       email: user.email,
       role: user.role,
+      clientId: clientIdStr,
     };
     const accessToken = this.jwtService.sign(payload);
     this.logger.log(`User logged in: ${user.email}`);
@@ -212,11 +215,38 @@ export class AuthService {
         lastName: user.lastName,
         role: user.role as UserRole,
         avatarUrl: user.avatarUrl ?? null,
+        clientId: clientIdStr,
       },
     };
   }
 
   async validateUser(userId: string): Promise<any> {
     return this.usersService.findById(userId);
+  }
+
+  async getMe(userId: string) {
+    const user = await this.usersService.findByIdWithClient(userId);
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+    return {
+      id: String(user.id),
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role as UserRole,
+      avatarUrl: user.avatarUrl ?? null,
+      clientId: user.clientId != null ? String(user.clientId) : null,
+      client: (user as any).client
+        ? {
+            id: String((user as any).client.id),
+            code: (user as any).client.code,
+            name: (user as any).client.name,
+            businessName: (user as any).client.businessName,
+            taxId: (user as any).client.taxId,
+            isActive: (user as any).client.isActive,
+          }
+        : null,
+    };
   }
 }

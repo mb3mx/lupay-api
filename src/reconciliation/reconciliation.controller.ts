@@ -25,7 +25,7 @@ import { ReconciliationStatus } from '@prisma/client';
 @ApiTags('Reconciliation')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('reconciliation')
+@Controller('conciliacion')
 export class ReconciliationController {
   constructor(private readonly reconciliationService: ReconciliationService) {}
 

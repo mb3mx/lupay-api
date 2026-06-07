@@ -6,7 +6,9 @@ import {
   IsNumber,
   Min,
   Max,
+  Length,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateClientDto {
@@ -61,8 +63,26 @@ export class CreateClientDto {
   @IsOptional()
   bankAccount?: string;
 
-  @ApiPropertyOptional({ example: '012345678901234567' })
+  @ApiPropertyOptional({ example: '012345678901234567', description: 'CLABE bancaria (18 digitos)' })
   @IsString()
   @IsOptional()
+  @Length(18, 18, { message: 'bankClabe debe tener exactamente 18 caracteres' })
   bankClabe?: string;
+
+  @ApiPropertyOptional({ example: 'AFL00123' })
+  @IsString()
+  @IsOptional()
+  afiliacion?: string;
+
+  @ApiPropertyOptional({ example: 1, description: 'ID del sindicato (opcional)' })
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  sindicatoId?: number;
+
+  @ApiPropertyOptional({ example: 1, description: 'ID de la liquidadora (opcional)' })
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  liquidadoraId?: number;
 }

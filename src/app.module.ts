@@ -15,6 +15,7 @@ import { LiquidacionModule } from './liquidacion/liquidacion.module';
 import { DevolucionesModule } from './devoluciones/devoluciones.module';
 import { ContracargosModule } from './contracargos/contracargos.module';
 import { CancelacionesModule } from './cancelaciones/cancelaciones.module';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { CancelacionesModule } from './cancelaciones/cancelaciones.module';
       envFilePath: ['.env', '.env.local'],
     }),
     PrismaModule,
+    CommonModule,
     AuthModule,
     UsersModule,
     ClientsModule,

@@ -12,6 +12,7 @@ datasource db {
 enum UserRole {
   ADMIN
   USER
+  CLIENT
 }
 
 enum CardBrand {
@@ -97,11 +98,15 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  clientId BigInt? @map("client_id")
+  client   Client? @relation(fields: [clientId], references: [id])
+
   uploadedFiles FileControl[]
 
   @@unique([provider, providerId], name: "provider_providerId")
   @@index([email])
   @@index([role])
+  @@index([clientId])
   @@map("user")
 }
 
@@ -165,6 +170,7 @@ model Client {
   settlements      Settlement[]
   payouts          Payout[]
   liquidacionItems LiquidacionItem[]
+  users            User[]
 
   @@index([code])
   @@index([taxId])

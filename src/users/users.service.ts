@@ -26,6 +26,24 @@ export class UsersService {
     });
   }
 
+  async findByIdWithClient(id: any) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        client: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            businessName: true,
+            taxId: true,
+            isActive: true,
+          },
+        },
+      },
+    });
+  }
+
   async findAll(params: {
     skip?: number;
     take?: number;

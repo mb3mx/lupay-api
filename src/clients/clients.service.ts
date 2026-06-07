@@ -36,6 +36,12 @@ export class ClientsService {
     });
   }
 
+  async count(where?: Prisma.ClientWhereInput): Promise<number> {
+    return this.prisma.client.count({
+      where: { ...where, isActive: true },
+    });
+  }
+
   async findById(id: any): Promise<Client | null> {
     return this.prisma.client.findUnique({
       where: { id, isActive: true },
@@ -100,11 +106,19 @@ export class ClientsService {
 
   async delete(id: any): Promise<Client> {
     try {
-      // Soft delete
-      return await this.prisma.client.update({
-        where: { id },
-        data: { isActive: false },
-      });
+      const clientId = typeof id === 'bigint' ? id : BigInt(id);
+      const [, client] = await this.prisma.$transaction([
+        this.prisma.user.updateMany({
+          where: { clientId, role: 'CLIENT' },
+          data: { isActive: false },
+        }),
+        this.prisma.client.update({
+          where: { id: clientId },
+          data: { isActive: false },
+        }),
+      ]);
+      this.logger.log(`Client ${clientId} deactivated (cascade to CLIENT users)`);
+      return client;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2025') {

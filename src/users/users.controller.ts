@@ -135,11 +135,12 @@ export class UsersController {
   @Get('me')
   @ApiOperation({ summary: 'Get current authenticated user profile' })
   async getMe(@Request() req: any) {
-    const user = await this.usersService.findById(req.user.userId);
+    const user = await this.usersService.findByIdWithClient(req.user.userId);
     if (!user) return { data: null };
+    const anyUser = user as any;
     return {
       data: {
-        id: user.id,
+        id: String(user.id),
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -147,6 +148,17 @@ export class UsersController {
         isActive: user.isActive,
         avatarUrl: user.avatarUrl,
         createdAt: user.createdAt,
+        clientId: user.clientId != null ? String(user.clientId) : null,
+        client: anyUser.client
+          ? {
+              id: String(anyUser.client.id),
+              code: anyUser.client.code,
+              name: anyUser.client.name,
+              businessName: anyUser.client.businessName,
+              taxId: anyUser.client.taxId,
+              isActive: anyUser.client.isActive,
+            }
+          : null,
       },
     };
   }

@@ -20,17 +20,21 @@ import {
 } from '@nestjs/swagger';
 import { ClientsService } from './clients.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '../common/enums';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
 @ApiTags('Clients')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('clients')
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
   @Get()
+  @Roles(UserRole.ADMIN, UserRole.USER)
   @ApiOperation({ summary: 'Get all clients' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -47,23 +51,29 @@ export class ClientsController {
             { name: { contains: search, mode: 'insensitive' as const } },
             { code: { contains: search, mode: 'insensitive' as const } },
             { businessName: { contains: search, mode: 'insensitive' as const } },
+            { taxId: { contains: search, mode: 'insensitive' as const } },
           ],
         }
       : undefined;
 
-    const clients = await this.clientsService.findAll({ skip, take: limit, where });
+    const [clients, total] = await Promise.all([
+      this.clientsService.findAll({ skip, take: limit, where }),
+      this.clientsService.count(where),
+    ]);
 
     return {
       data: clients,
       meta: {
         page,
         limit,
-        total: clients.length,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
       },
     };
   }
 
   @Get(':id')
+  @Roles(UserRole.ADMIN, UserRole.USER)
   @ApiOperation({ summary: 'Get client by ID' })
   @ApiParam({ name: 'id', description: 'Client ID' })
   async findOne(@Param('id') id: any) {
@@ -72,14 +82,16 @@ export class ClientsController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new client' })
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Create a new client (ADMIN only)' })
   async create(@Body() createClientDto: CreateClientDto) {
     const client = await this.clientsService.create(createClientDto);
     return { data: client };
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update client' })
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update client (ADMIN only)' })
   @ApiParam({ name: 'id', description: 'Client ID' })
   async update(@Param('id') id: any, @Body() updateClientDto: UpdateClientDto) {
     const client = await this.clientsService.update(id, updateClientDto);
@@ -87,7 +99,8 @@ export class ClientsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete client (soft delete)' })
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Delete client - soft delete (ADMIN only)' })
   @ApiParam({ name: 'id', description: 'Client ID' })
   async remove(@Param('id') id: any) {
     await this.clientsService.delete(id);
