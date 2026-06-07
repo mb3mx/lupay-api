@@ -72,12 +72,14 @@ export class ReconciliationController {
   @ApiQuery({ name: 'dateFrom', required: false })
   @ApiQuery({ name: 'dateTo', required: false })
   @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'auth', required: false, description: 'Filtrar por número de autorización (ignora fechas)' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   async getResults(
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
     @Query('status') status?: string,
+    @Query('auth') auth?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
   ) {
@@ -85,6 +87,7 @@ export class ReconciliationController {
       dateFrom,
       dateTo,
       status,
+      auth,
       page,
       limit,
     });

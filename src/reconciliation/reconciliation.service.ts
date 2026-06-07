@@ -39,26 +39,32 @@ export class ReconciliationService {
     dateFrom?: string;
     dateTo?: string;
     status?: string;
+    auth?: string;
     page?: number;
     limit?: number;
   }): Promise<{ data: any[]; meta: any }> {
-    const { dateFrom, dateTo, status, page = 1, limit = 20 } = params;
+    const { dateFrom, dateTo, status, auth, page = 1, limit = 20 } = params;
+    const authTrimmed = auth?.trim();
 
     const where: any = { isExcluded: false };
-    if (dateFrom && dateTo) {
-      where.transactionDate = {
-        gte: new Date(dateFrom + 'T00:00:00.000Z'),
-        lte: new Date(dateTo + 'T23:59:59.999Z'),
-      };
-    }
 
-    // Filtro por estado:
-    //  - MATCHED / AMOUNT_MISMATCH → transacciones con reconciliation de ese estado
-    //  - NOT_FOUND → transacciones SIN reconciliation
-    if (status === 'NOT_FOUND') {
-      where.reconciliations = { none: {} };
-    } else if (status === 'MATCHED' || status === 'AMOUNT_MISMATCH') {
-      where.reconciliations = { some: { status } };
+    // Si viene búsqueda por autorización, ignora rango de fechas y status
+    // (búsqueda global por # de autorización desde el header).
+    if (authTrimmed) {
+      where.authorizationNumber = authTrimmed;
+    } else {
+      if (dateFrom && dateTo) {
+        where.transactionDate = {
+          gte: new Date(dateFrom + 'T00:00:00.000Z'),
+          lte: new Date(dateTo + 'T23:59:59.999Z'),
+        };
+      }
+
+      if (status === 'NOT_FOUND') {
+        where.reconciliations = { none: {} };
+      } else if (status === 'MATCHED' || status === 'AMOUNT_MISMATCH') {
+        where.reconciliations = { some: { status } };
+      }
     }
 
     const [transactions, total] = await Promise.all([
@@ -69,8 +75,15 @@ export class ReconciliationService {
         orderBy: { transactionDate: 'desc' },
         include: {
           client: { select: { name: true, afiliacion: true } },
+          file: { select: { originalName: true, createdAt: true } },
           reconciliations: {
-            include: { settlement: true },
+            include: {
+              settlement: {
+                include: {
+                  file: { select: { originalName: true, createdAt: true } },
+                },
+              },
+            },
             take: 1,
           },
         },
@@ -94,6 +107,9 @@ export class ReconciliationService {
           afiliacion: tx.afiliacion,
           transactionDate: tx.transactionDate,
           client: { name: tx.client.name },
+          file: tx.file
+            ? { originalName: tx.file.originalName, uploadedAt: tx.file.createdAt }
+            : null,
         },
         settlement: rec?.settlement
           ? {
@@ -101,6 +117,12 @@ export class ReconciliationService {
               amount: rec.settlement.amount,
               montoPagar: rec.settlement.montoPagar,
               settlementDate: rec.settlement.settlementDate,
+              file: rec.settlement.file
+                ? {
+                    originalName: rec.settlement.file.originalName,
+                    uploadedAt: rec.settlement.file.createdAt,
+                  }
+                : null,
             }
           : null,
       };

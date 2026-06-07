@@ -84,18 +84,22 @@ enum ContracargoStatus {
 model User {
   id        BigInt   @id @default(autoincrement())
   email     String   @unique
-  password  String
+  password  String?
   firstName String   @map("first_name")
   lastName  String   @map("last_name")
   role      UserRole @default(USER)
-  isActive  Boolean  @default(true) @map("active")
+  isActive  Boolean  @default(false) @map("active")
   avatarUrl String?  @map("avatar_url")
+
+  provider   String? @default("local")
+  providerId String? @map("provider_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   uploadedFiles FileControl[]
 
+  @@unique([provider, providerId], name: "provider_providerId")
   @@index([email])
   @@index([role])
   @@map("user")

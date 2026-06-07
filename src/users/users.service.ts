@@ -14,6 +14,12 @@ export class UsersService {
     });
   }
 
+  async findByProvider(provider: string, providerId: string): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { provider_providerId: { provider, providerId } },
+    });
+  }
+
   async findById(id: any): Promise<User | null> {
     return this.prisma.user.findUnique({
       where: { id },
