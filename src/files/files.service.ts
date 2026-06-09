@@ -161,6 +161,7 @@ export class FilesService {
           fileControl,
           clientId,
         );
+        await this.excludeOriginalPaymentsForCancellations(fileControl.id);
       } else if (isXlsx && fileControl.fileType === FileType.SETTLEMENTS) {
         recordsProcessed = await this.processPosre(fileControl, clientId);
       } else if (fileExtension === '.csv') {
@@ -523,5 +524,53 @@ export class FilesService {
         },
       },
     });
+  }
+
+  private async excludeOriginalPaymentsForCancellations(fileId: bigint): Promise<number> {
+    const cancellations = await this.prisma.transaction.findMany({
+      where: {
+        fileId,
+        isExcluded: true,
+        operationType: {
+          in: ['CANCELACION', 'DEVOLUCION', 'CANCELACIÓN', 'DEVOLUCIÓN', 'REVERSO', 'REVERSO_AMEX'],
+        },
+      },
+      select: {
+        authorizationNumber: true,
+        transactionId: true,
+      },
+    });
+
+    let excludedCount = 0;
+
+    for (const canc of cancellations) {
+      if (!canc.authorizationNumber) continue;
+
+      const updateResult = await this.prisma.transaction.updateMany({
+        where: {
+          transactionId: canc.authorizationNumber,
+          operationType: {
+            startsWith: 'PAGO',
+            mode: 'insensitive',
+          },
+          isExcluded: false,
+        },
+        data: {
+          status: 'CANCELLED',
+          isExcluded: true,
+          exclusionReason: `Pago original cancelado por transacción ${canc.transactionId}`,
+        },
+      });
+
+      excludedCount += updateResult.count;
+    }
+
+    if (excludedCount > 0) {
+      this.logger.log(
+        `[Cancelaciones] Se marcaron ${excludedCount} pagos originales como CANCELLED y excluidos debido a cancelaciones en el archivo.`,
+      );
+    }
+
+    return excludedCount;
   }
 }

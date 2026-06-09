@@ -143,7 +143,7 @@ export class TransaccionesParser {
       const fee = cellNum(row.getCell(C.montoCom)) ?? 0;
       const iva = cellNum(row.getCell(C.ivaCom)) ?? 0;
 
-      const isExcluded = tipo.toUpperCase() !== 'PAGO';
+      const isExcluded = !tipo.toUpperCase().startsWith('PAGO');
 
       yield {
         // Campos clave

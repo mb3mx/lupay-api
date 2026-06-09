@@ -172,7 +172,7 @@ export class TransactionsService {
   private shouldExclude(operationType: string | null): boolean {
     if (!operationType) return false;
     const normalized = operationType.toUpperCase().trim();
-    return EXCLUDED_OPERATIONS.some((op) => normalized.includes(op));
+    return !normalized.startsWith('PAGO');
   }
 
   private calculateLiquidationDate(transactionDate: Date, cardBrand: CardBrand): Date {
