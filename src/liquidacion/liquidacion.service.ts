@@ -52,22 +52,31 @@ export class LiquidacionService {
         client: {
           include: { liquidadora: true, sindicato: true },
         },
+        reconciliations: {
+          where: { status: 'MATCHED' },
+          include: { settlement: true },
+        },
       },
     });
 
     // Agrupar por merchantName (nombre del negocio en el archivo Transacciones)
     const porMerchant: Record<
       string,
-      { merchantName: string; montoBruto: number; count: number }
+      { merchantName: string; montoBruto: number; count: number; montoSettlement: number }
     > = {};
 
     for (const tx of transactions) {
       const key = tx.merchantName || tx.client.name;
       if (!porMerchant[key]) {
-        porMerchant[key] = { merchantName: key, montoBruto: 0, count: 0 };
+        porMerchant[key] = { merchantName: key, montoBruto: 0, count: 0, montoSettlement: 0 };
       }
       porMerchant[key].montoBruto += tx.importeLupay ?? tx.amount;
       porMerchant[key].count++;
+
+      const matchedRec = tx.reconciliations.find((r) => r.status === 'MATCHED');
+      if (matchedRec?.settlement) {
+        porMerchant[key].montoSettlement += matchedRec.settlement.settledAmount ?? 0;
+      }
     }
 
     // Buscar cada merchant en el catálogo de clientes
@@ -82,12 +91,17 @@ export class LiquidacionService {
     // Construir items — solo negocios con liquidadora asignada
     const porCliente: Record<
       string,
-      { client: any; montoBruto: number; count: number }
+      { client: any; montoBruto: number; count: number; montoSettlement: number }
     > = {};
     for (const [key, data] of Object.entries(porMerchant)) {
       const cliente = clientesByName[key];
       if (!cliente) continue;
-      porCliente[key] = { client: cliente, montoBruto: data.montoBruto, count: data.count };
+      porCliente[key] = {
+        client: cliente,
+        montoBruto: data.montoBruto,
+        count: data.count,
+        montoSettlement: data.montoSettlement,
+      };
     }
 
     // Calcular totales
@@ -95,7 +109,7 @@ export class LiquidacionService {
     let totalComision = 0;
     let totalNeto = 0;
 
-    const items = Object.values(porCliente).map(({ client, montoBruto }) => {
+    const items = Object.values(porCliente).map(({ client, montoBruto, montoSettlement }) => {
       const pctComision = client.commissionTotal ?? 0;
       const comision = Math.round(montoBruto * pctComision * 100) / 100;
       const pagoNeto = Math.round((montoBruto - comision) * 100) / 100;
@@ -107,6 +121,7 @@ export class LiquidacionService {
         client,
         liquidadoraId: client.liquidadoraId,
         montoBruto: Math.round(montoBruto * 100) / 100,
+        montoSettlement: Math.round(montoSettlement * 100) / 100,
         pctComision,
         comision,
         pagoNeto,
@@ -127,6 +142,7 @@ export class LiquidacionService {
               clientId: i.clientId,
               liquidadoraId: i.liquidadoraId!,
               montoBruto: i.montoBruto,
+              montoSettlement: i.montoSettlement,
               pctComision: i.pctComision,
               comision: i.comision,
               pagoNeto: i.pagoNeto,
@@ -209,7 +225,11 @@ export class LiquidacionService {
             client: { include: { sindicato: true, liquidadora: true } },
             liquidadora: true,
           },
-          orderBy: { pagoNeto: 'desc' },
+          orderBy: {
+            client: {
+              name: 'asc',
+            },
+          },
         },
       },
     });
@@ -241,7 +261,7 @@ export class LiquidacionService {
     // Hoja 2: LIQ BUG por negocio
     const wsLiq = wb.addWorksheet('LIQ BUG');
     wsLiq.addRow([
-      'Negocio', 'Razón Social', 'Sindicato', 'Monto Bruto',
+      'Negocio', 'Razón Social', 'Sindicato', 'Monto Settlement', 'Monto Bruto', 'Diferencia',
       '% Comisión', 'Comisión', 'Pago Neto',
     ]);
     wsLiq.getRow(1).font = { bold: true };
@@ -250,7 +270,9 @@ export class LiquidacionService {
         item.client.name,
         item.liquidadora?.razonSocial ?? '',
         item.client.sindicato?.nombre ?? '',
+        item.montoSettlement,
         item.montoBruto,
+        Math.round((item.montoSettlement - item.montoBruto) * 100) / 100,
         `${(item.pctComision * 100).toFixed(2)}%`,
         item.comision,
         item.pagoNeto,
