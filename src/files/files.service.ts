@@ -285,6 +285,10 @@ export class FilesService {
     const parser = new PosreParser();
     let inserted = 0;
     let duplicates = 0;
+    // POSRE ya no produce conflictos: cuando la identidad logica coincide pero
+    // el monto difiere (reverso), el settlement se inserta como adicional.
+    // Mantenemos el array vacio para preservar el shape de __processStats y la
+    // estadistica conflictCount=0 en file_control.
     const conflicts: ConflictDetail[] = [];
 
     for await (const row of parser.parse(fileControl.filePath)) {
@@ -304,15 +308,8 @@ export class FilesService {
 
       if (result.kind === 'created') inserted++;
       else if (result.kind === 'duplicate') duplicates++;
-      else if (result.kind === 'conflict') {
-        conflicts.push({
-          auth: result.auth,
-          old: result.existingAmount,
-          new: result.newAmount,
-        });
-      }
 
-      const total = inserted + duplicates + conflicts.length;
+      const total = inserted + duplicates;
       if (total % 100 === 0) {
         await this.prisma.fileControl.update({
           where: { id: fileControl.id },
@@ -327,11 +324,11 @@ export class FilesService {
       data: {
         insertedCount: inserted,
         duplicateCount: duplicates,
-        conflictCount: conflicts.length,
+        conflictCount: 0,
       },
     });
 
-    return inserted + duplicates + conflicts.length;
+    return inserted + duplicates;
   }
 
   // Auto-conciliación con estrategia auth + tarjeta + monto.

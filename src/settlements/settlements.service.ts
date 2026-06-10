@@ -146,12 +146,10 @@ export class SettlementsService {
   ): Promise<
     | { kind: 'created'; record: Settlement }
     | { kind: 'duplicate' }
-    | { kind: 'conflict'; existingAmount: number; newAmount: number; auth: string }
   > {
-    // Verificar si ya existe un settlement con la misma identidad lógica:
-    // auth + cuenta + fecha liquidación + afiliación. Si existe:
-    //   - Mismo monto  → duplicado
-    //   - Monto distinto → conflicto
+    // Solo se descarta cuando la identidad logica (auth + cuenta + fecha + afiliacion)
+    // coincide tambien en monto. Si el monto difiere (reverso / ajuste del banco),
+    // se permite el INSERT para que el reverso quede registrado como settlement adicional.
     if (row.authorizationNumber) {
       const existing = await this.prisma.settlement.findFirst({
         where: {
@@ -163,15 +161,7 @@ export class SettlementsService {
         select: { id: true, amount: true },
       });
 
-      if (existing) {
-        if (Math.abs(existing.amount - row.amount) > 0.01) {
-          return {
-            kind: 'conflict',
-            existingAmount: existing.amount,
-            newAmount: row.amount,
-            auth: row.authorizationNumber,
-          };
-        }
+      if (existing && Math.abs(existing.amount - row.amount) <= 0.01) {
         return { kind: 'duplicate' };
       }
     }
