@@ -139,6 +139,42 @@ export class UsersController {
     };
   }
 
+  // IMPORTANTE: 'me' debe declararse ANTES de ':id'. En NestJS las rutas se
+  // resuelven en orden; si ':id' va primero, GET /users/me cae en findOne con
+  // id="me" y revienta en BigInt("me").
+  @Get('me')
+  @ApiOperation({ summary: 'Get current authenticated user profile' })
+  async getMe(@Request() req: any) {
+    const user = await this.usersService.findByIdWithClient(
+      BigInt(req.user.userId),
+    );
+    if (!user) return { data: null };
+    const anyUser = user as any;
+    return {
+      data: {
+        id: String(user.id),
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        isActive: user.isActive,
+        avatarUrl: user.avatarUrl,
+        createdAt: user.createdAt,
+        clientId: user.clientId != null ? String(user.clientId) : null,
+        client: anyUser.client
+          ? {
+              id: String(anyUser.client.id),
+              code: anyUser.client.code,
+              name: anyUser.client.name,
+              businessName: anyUser.client.businessName,
+              taxId: anyUser.client.taxId,
+              isActive: anyUser.client.isActive,
+            }
+          : null,
+      },
+    };
+  }
+
   @Get(':id')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get user by ID (ADMIN)' })
@@ -164,37 +200,6 @@ export class UsersController {
               id: String(anyUser.client.id),
               code: anyUser.client.code,
               name: anyUser.client.name,
-            }
-          : null,
-      },
-    };
-  }
-
-  @Get('me')
-  @ApiOperation({ summary: 'Get current authenticated user profile' })
-  async getMe(@Request() req: any) {
-    const user = await this.usersService.findByIdWithClient(req.user.userId);
-    if (!user) return { data: null };
-    const anyUser = user as any;
-    return {
-      data: {
-        id: String(user.id),
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        isActive: user.isActive,
-        avatarUrl: user.avatarUrl,
-        createdAt: user.createdAt,
-        clientId: user.clientId != null ? String(user.clientId) : null,
-        client: anyUser.client
-          ? {
-              id: String(anyUser.client.id),
-              code: anyUser.client.code,
-              name: anyUser.client.name,
-              businessName: anyUser.client.businessName,
-              taxId: anyUser.client.taxId,
-              isActive: anyUser.client.isActive,
             }
           : null,
       },
