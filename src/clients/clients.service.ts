@@ -22,12 +22,20 @@ export class ClientsService {
     orderBy?: Prisma.ClientOrderByWithRelationInput;
   }): Promise<Client[]> {
     const { skip, take, where, orderBy } = params;
+    // Si el caller no especifica isActive, se preserva el comportamiento legacy
+    // (solo activos). Si lo especifica (true/false), se respeta.
+    const finalWhere: Prisma.ClientWhereInput = { ...where };
+    if (finalWhere.isActive === undefined) {
+      finalWhere.isActive = true;
+    }
     return this.prisma.client.findMany({
       skip,
       take,
-      where: { ...where, isActive: true },
+      where: finalWhere,
       orderBy: orderBy || { name: 'asc' },
       include: {
+        sindicato: { select: { id: true, nombre: true } },
+        liquidadora: { select: { id: true, nombre: true } },
         terminals: {
           where: { isActive: true },
           select: { id: true, serialNumber: true, model: true },
@@ -37,9 +45,11 @@ export class ClientsService {
   }
 
   async count(where?: Prisma.ClientWhereInput): Promise<number> {
-    return this.prisma.client.count({
-      where: { ...where, isActive: true },
-    });
+    const finalWhere: Prisma.ClientWhereInput = { ...where };
+    if (finalWhere.isActive === undefined) {
+      finalWhere.isActive = true;
+    }
+    return this.prisma.client.count({ where: finalWhere });
   }
 
   async findById(id: any): Promise<Client | null> {
