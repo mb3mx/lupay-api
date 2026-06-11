@@ -10,7 +10,7 @@ export class DashboardService {
     const from = new Date(dateFrom + 'T00:00:00.000Z');
     const to = new Date(dateTo + 'T23:59:59.999Z');
 
-    const [totalTx, totalMatched, totalNotFound, totalMismatch, montoAgg] =
+    const [totalTx, totalMatched, totalNotFound, totalMismatch, montoAgg, posreAgg, noMatchMontoAgg] =
       await Promise.all([
         this.prisma.transaction.count({
           where: { isExcluded: false, transactionDate: { gte: from, lte: to } },
@@ -36,6 +36,36 @@ export class DashboardService {
         this.prisma.transaction.aggregate({
           where: { isExcluded: false, transactionDate: { gte: from, lte: to } },
           _sum: { amount: true, importeLupay: true },
+        }),
+        this.prisma.settlement.aggregate({
+          where: {
+            reconciliations: {
+              some: {
+                status: 'MATCHED',
+                transaction: {
+                  isExcluded: false,
+                  transactionDate: { gte: from, lte: to },
+                },
+              },
+            },
+          },
+          _sum: {
+            settledAmount: true,
+          },
+        }),
+        this.prisma.transaction.aggregate({
+          where: {
+            isExcluded: false,
+            transactionDate: { gte: from, lte: to },
+            reconciliations: {
+              none: {
+                status: { in: ['MATCHED', 'AMOUNT_MISMATCH'] }
+              }
+            }
+          },
+          _sum: {
+            importeLupay: true
+          }
         }),
       ]);
 
@@ -80,6 +110,8 @@ export class DashboardService {
       totalTransacciones: totalTx,
       montoTotal: Math.round(montoTotal * 100) / 100,
       montoTotalLupay: Math.round(montoTotalLupay * 100) / 100,
+      montoTotalPosre: Math.round((posreAgg._sum.settledAmount ?? 0) * 100) / 100,
+      importePorConciliar: Math.round((noMatchMontoAgg._sum.importeLupay ?? 0) * 100) / 100,
       ganancias: Math.round(ganancias * 100) / 100,
       totalConciliadas: totalMatched,
       totalNoMatch: sinMatch,
@@ -258,6 +290,7 @@ export class DashboardService {
         auth: tx.authorizationNumber ?? '',
         tarjeta: tx.cardNumber ?? '',
         cliente: tx.merchantName ?? tx.client?.name ?? '',
+        marca: tx.cardBrand ?? '',
         afiliacion: tx.afiliacion ?? tx.client?.afiliacion ?? '',
         montoTx: tx.amount,
         importeLupay: tx.importeLupay ?? 0,
@@ -272,7 +305,7 @@ export class DashboardService {
 
     const wb = new ExcelJS.Workbook();
     const headers = [
-      'Auth', 'Tarjeta', 'Cliente', 'Afiliación',
+      'Auth', 'Tarjeta', 'Cliente', 'Tarjeta', 'Afiliación',
       'Monto Tx', 'Importe Lupay', 'Importe POSRE', 'Diferencia', 'Fecha',
     ];
 
@@ -282,7 +315,7 @@ export class DashboardService {
       ws.getRow(1).font = { bold: true };
       for (const r of rows) {
         ws.addRow([
-          r.auth, r.tarjeta, r.cliente, r.afiliacion,
+          r.auth, r.tarjeta, r.cliente, r.marca, r.afiliacion,
           r.montoTx, r.importeLupay, r.importePosre, r.diferencia, r.fecha,
         ]);
       }
