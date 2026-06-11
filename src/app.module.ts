@@ -16,6 +16,9 @@ import { DevolucionesModule } from './devoluciones/devoluciones.module';
 import { ContracargosModule } from './contracargos/contracargos.module';
 import { CancelacionesModule } from './cancelaciones/cancelaciones.module';
 import { CommonModule } from './common/common.module';
+import { SindicatosModule } from './sindicatos/sindicatos.module';
+import { LiquidadorasModule } from './liquidadoras/liquidadoras.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -39,6 +42,9 @@ import { CommonModule } from './common/common.module';
     DevolucionesModule,
     ContracargosModule,
     CancelacionesModule,
+    SindicatosModule,
+    LiquidadorasModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

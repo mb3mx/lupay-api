@@ -78,7 +78,9 @@ export class FilesController {
       throw new BadRequestException('No file uploaded');
     }
 
-    const result = await this.filesService.uploadFile(
+    // El procesamiento corre en background; la respuesta vuelve de inmediato.
+    // El resultado final llega al usuario por la campanita (notificación SSE).
+    const fileControl = await this.filesService.uploadFile(
       file,
       uploadFileDto.fileType,
       uploadFileDto.clientId,
@@ -87,16 +89,10 @@ export class FilesController {
 
     return {
       data: {
-        fileId: result.fileControl.id,
-        originalName: result.fileControl.originalName,
-        fileType: result.fileControl.fileType,
-        status: result.fileControl.status,
-        recordsProcessed: result.recordsProcessed,
-        recordsInserted: result.recordsInserted,
-        recordsDuplicated: result.recordsDuplicated,
-        recordsConflicts: result.recordsConflicts,
-        conflictsSample: result.conflictsSample,
-        autoReconciliation: result.autoReconciliation,
+        fileId: fileControl.id,
+        originalName: fileControl.originalName,
+        fileType: fileControl.fileType,
+        status: 'PROCESSING',
       },
     };
   }

@@ -215,6 +215,7 @@ model FileControl {
   duplicateCount Int        @default(0) @map("duplicate_count")
   conflictCount  Int        @default(0) @map("conflict_count")
   errorMessage   String?    @map("error_message")
+  resultDetails  Json?      @map("result_details")
 
   processedAt DateTime?  @map("processed_at")
   createdAt   DateTime   @default(now()) @map("created_at")

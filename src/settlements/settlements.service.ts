@@ -147,9 +147,14 @@ export class SettlementsService {
     | { kind: 'created'; record: Settlement }
     | { kind: 'duplicate' }
   > {
-    // Solo se descarta cuando la identidad logica (auth + cuenta + fecha + afiliacion)
-    // coincide tambien en monto. Si el monto difiere (reverso / ajuste del banco),
-    // se permite el INSERT para que el reverso quede registrado como settlement adicional.
+    // Se descarta cuando ya existe un settlement con la misma identidad logica
+    // (auth + cuenta + fecha + afiliacion) Y el mismo monto. El monto se incluye
+    // en la consulta (no se compara despues sobre un findFirst arbitrario) para que:
+    //   - un reverso/ajuste con monto distinto se inserte como settlement adicional
+    //     la primera vez, y
+    //   - al recargar el mismo archivo, ese reverso ya se encuentre por identidad+monto
+    //     y se marque duplicado (antes findFirst regresaba el pago original con otro
+    //     monto y el reverso se reinsertaba en cada carga).
     if (row.authorizationNumber) {
       const existing = await this.prisma.settlement.findFirst({
         where: {
@@ -157,11 +162,12 @@ export class SettlementsService {
           reference: row.cardNumber || undefined,
           settlementDate: row.settlementDate,
           afiliacion: row.afiliacion || undefined,
+          amount: { gte: row.amount - 0.01, lte: row.amount + 0.01 },
         },
-        select: { id: true, amount: true },
+        select: { id: true },
       });
 
-      if (existing && Math.abs(existing.amount - row.amount) <= 0.01) {
+      if (existing) {
         return { kind: 'duplicate' };
       }
     }

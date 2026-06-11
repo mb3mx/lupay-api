@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ClientsService } from '../clients/clients.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { SettlementsService } from '../settlements/settlements.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { FileControl, FileType, FileStatus } from '@prisma/client';
 import { CsvParser, ParsedRow as CsvRow } from './parsers/csv-parser';
 import { XlsxParser, ParsedRow as XlsxRow } from './parsers/xlsx-parser';
@@ -26,20 +27,6 @@ export interface ConflictDetail {
   new: number;
 }
 
-interface FileUploadResult {
-  fileControl: FileControl;
-  recordsProcessed: number;
-  recordsInserted: number;
-  recordsDuplicated: number;
-  recordsConflicts: number;
-  conflictsSample: ConflictDetail[];
-  autoReconciliation?: {
-    matched: number;
-    amountMismatch: number;
-    notFound: number;
-  };
-}
-
 @Injectable()
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
@@ -51,6 +38,7 @@ export class FilesService {
     private readonly clientsService: ClientsService,
     private readonly transactionsService: TransactionsService,
     private readonly settlementsService: SettlementsService,
+    private readonly notificationsService: NotificationsService,
   ) {
     this.uploadPath =
       this.configService.get<string>('UPLOAD_DEST') || './uploads';
@@ -63,12 +51,17 @@ export class FilesService {
     }
   }
 
+  /**
+   * Guarda el archivo y crea el registro FileControl, luego lanza el
+   * procesamiento en background (sin await). La respuesta vuelve de inmediato
+   * con status PROCESSING; al terminar se emite una notificación (campanita).
+   */
   async uploadFile(
     file: Express.Multer.File,
     fileType: FileType,
     clientId: any,
     userId: any,
-  ): Promise<FileUploadResult> {
+  ): Promise<FileControl> {
     // Validate client exists
     const client = await this.clientsService.findById(BigInt(clientId));
     if (!client) {
@@ -100,28 +93,76 @@ export class FilesService {
       `File uploaded: ${file.originalname} (${fileType}) for client ${clientId}`,
     );
 
-    const recordsProcessed = await this.processFile(
+    // Procesamiento en background (fire-and-forget). No bloquea la respuesta.
+    void this.processInBackground(
       fileControl,
       BigInt(clientId),
       fileExtension,
+      userId,
     );
 
-    const autoReconciliation = (fileControl as any).__autoRecon;
-    const stats = (fileControl as any).__processStats ?? {
-      inserted: recordsProcessed,
-      duplicates: 0,
-      conflicts: [],
-    };
+    return fileControl;
+  }
 
-    return {
-      fileControl,
-      recordsProcessed,
-      recordsInserted: stats.inserted,
-      recordsDuplicated: stats.duplicates,
-      recordsConflicts: stats.conflicts.length,
-      conflictsSample: stats.conflicts.slice(0, 10),
-      autoReconciliation,
-    };
+  /**
+   * Ejecuta el procesamiento completo de un archivo fuera del ciclo de la
+   * petición HTTP, persiste el detalle del resultado en FileControl.resultDetails
+   * y emite la notificación a la campanita del usuario al finalizar
+   * (tanto en éxito como en error).
+   */
+  private async processInBackground(
+    fileControl: FileControl,
+    clientId: bigint,
+    fileExtension: string,
+    userId: any,
+  ): Promise<void> {
+    try {
+      const recordsProcessed = await this.processFile(
+        fileControl,
+        clientId,
+        fileExtension,
+      );
+
+      const autoReconciliation = (fileControl as any).__autoRecon ?? null;
+      const stats = (fileControl as any).__processStats ?? {
+        inserted: recordsProcessed,
+        duplicates: 0,
+        conflicts: [],
+      };
+
+      const resultDetails = {
+        recordsProcessed,
+        recordsInserted: stats.inserted,
+        recordsDuplicated: stats.duplicates,
+        recordsConflicts: stats.conflicts.length,
+        conflictsSample: stats.conflicts.slice(0, 10),
+        autoReconciliation,
+      };
+
+      const updated = await this.prisma.fileControl.update({
+        where: { id: fileControl.id },
+        data: { resultDetails },
+      });
+
+      this.notificationsService.emit(
+        userId,
+        NotificationsService.toNotification(updated),
+      );
+    } catch (error: any) {
+      // processFile ya marcó el FileControl como ERROR con errorMessage.
+      this.logger.error(
+        `Background processing failed for ${fileControl.originalName}: ${error.message}`,
+      );
+      const errored = await this.prisma.fileControl.findUnique({
+        where: { id: fileControl.id },
+      });
+      if (errored) {
+        this.notificationsService.emit(
+          userId,
+          NotificationsService.toNotification(errored),
+        );
+      }
+    }
   }
 
   private async saveFile(
