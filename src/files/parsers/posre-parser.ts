@@ -22,17 +22,28 @@ function parseCardBrand(descripcion: string | null): CardBrand {
   return CardBrand.OTHER;
 }
 
-// POSRE fecha_consumo formato YYMMDD, ej: 260211 → 2026-02-11
-function parseFechaConsumo(raw: unknown): Date {
-  if (raw instanceof Date) return raw;
-  const s = raw?.toString().trim() ?? '';
-  if (s.length === 6) {
-    const yy = parseInt(s.substring(0, 2));
-    const mm = parseInt(s.substring(2, 4)) - 1;
-    const dd = parseInt(s.substring(4, 6));
-    return new Date(2000 + yy, mm, dd);
+// POSRE: fecha_consumo (YYMMDD, ej 260211) + hora_consumo (HHMMSS, ej 163042)
+// → Date completo 2026-02-11 16:30:42. Si la hora falta/inválida, queda a medianoche.
+function parseFechaHoraConsumo(fechaRaw: unknown, horaRaw: unknown): Date {
+  if (fechaRaw instanceof Date) return fechaRaw;
+  const f = fechaRaw?.toString().trim() ?? '';
+  if (f.length !== 6) return new Date();
+  const yy = parseInt(f.substring(0, 2));
+  const mm = parseInt(f.substring(2, 4)) - 1;
+  const dd = parseInt(f.substring(4, 6));
+
+  // hora_consumo viene como HHMMSS (rellenamos a 6 por si trae menos dígitos).
+  const h = (horaRaw?.toString().trim() ?? '').padStart(6, '0');
+  let hh = 0;
+  let mi = 0;
+  let ss = 0;
+  if (/^\d{6}$/.test(h)) {
+    hh = parseInt(h.substring(0, 2));
+    mi = parseInt(h.substring(2, 4));
+    ss = parseInt(h.substring(4, 6));
   }
-  return new Date();
+  // UTC para que el día/hora queden tal cual el Excel (sin corrimiento de TZ).
+  return new Date(Date.UTC(2000 + yy, mm, dd, hh, mi, ss));
 }
 
 function parseFechaLiq(raw: unknown): Date {
@@ -77,6 +88,7 @@ export class PosreParser {
     const colDesc = idx('descripcion');
     const colAfil = idx('clave_comercio');
     const colFechaConsumo = idx('fecha_consumo');
+    const colHoraConsumo = idx('hora_consumo');
     const colFechaLiq = idx('FechaLiq');
 
     for (let rowNum = headerRow + 1; rowNum <= ws.rowCount; rowNum++) {
@@ -102,7 +114,10 @@ export class PosreParser {
           row.getCell(colDesc).value?.toString() || null,
         ),
         afiliacion,
-        transactionDate: parseFechaConsumo(row.getCell(colFechaConsumo).value),
+        transactionDate: parseFechaHoraConsumo(
+          row.getCell(colFechaConsumo).value,
+          colHoraConsumo > 0 ? row.getCell(colHoraConsumo).value : null,
+        ),
         settlementDate: parseFechaLiq(row.getCell(colFechaLiq).value),
         isCancelled: amount < 0,
       };

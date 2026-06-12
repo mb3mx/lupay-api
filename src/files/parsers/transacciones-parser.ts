@@ -48,16 +48,45 @@ function parseCardBrand(marca: string | null): CardBrand {
   return CardBrand.OTHER;
 }
 
-function parseDate(raw: unknown): Date {
-  if (raw instanceof Date) return raw;
+// Hora en formato 12h "hh:mm:ss AM/PM" (o "hh:mm AM/PM") → componentes 24h.
+function parseHora12(raw: string | null): { hh: number; mi: number; ss: number } {
+  if (!raw) return { hh: 0, mi: 0, ss: 0 };
+  const m = raw
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (!m) return { hh: 0, mi: 0, ss: 0 };
+  let hh = parseInt(m[1]);
+  const mi = parseInt(m[2]);
+  const ss = m[3] ? parseInt(m[3]) : 0;
+  const ap = m[4]?.toUpperCase();
+  if (ap === 'PM' && hh < 12) hh += 12;
+  if (ap === 'AM' && hh === 12) hh = 0;
+  return { hh, mi, ss };
+}
+
+// Combina Fecha (dd/MM/yyyy) + Hora (12h) en un Date completo. Si no hay hora,
+// queda a medianoche.
+function parseDate(raw: unknown, hora?: string | null): Date {
+  const { hh, mi, ss } = parseHora12(hora ?? null);
+  // UTC para que el día/hora queden tal cual el Excel (sin corrimiento de TZ).
+  if (raw instanceof Date) {
+    return new Date(
+      Date.UTC(raw.getFullYear(), raw.getMonth(), raw.getDate(), hh, mi, ss),
+    );
+  }
   if (typeof raw === 'string') {
     // dd/MM/yyyy
     const parts = raw.split('/');
     if (parts.length === 3) {
       return new Date(
-        parseInt(parts[2]),
-        parseInt(parts[1]) - 1,
-        parseInt(parts[0]),
+        Date.UTC(
+          parseInt(parts[2]),
+          parseInt(parts[1]) - 1,
+          parseInt(parts[0]),
+          hh,
+          mi,
+          ss,
+        ),
       );
     }
   }
@@ -156,7 +185,10 @@ export class TransaccionesParser {
         cardBrand: parseCardBrand(cellStr(row.getCell(C.marca))),
         tipoPago: cellStr(row.getCell(C.metodo)),
         operationType: tipo,
-        transactionDate: parseDate(row.getCell(C.fecha).value),
+        transactionDate: parseDate(
+          row.getCell(C.fecha).value,
+          cellStr(row.getCell(C.hora)),
+        ),
         afiliacion: cellStr(row.getCell(C.afiliacion)),
         transactionId: cellStr(row.getCell(C.id)),
         reference: cellStr(row.getCell(C.ref)),
