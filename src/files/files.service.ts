@@ -205,6 +205,7 @@ export class FilesService {
         await this.excludeOriginalPaymentsForCancellations(fileControl.id);
       } else if (isXlsx && fileControl.fileType === FileType.SETTLEMENTS) {
         recordsProcessed = await this.processPosre(fileControl, clientId);
+        await this.excludeOriginalSettlementsForReversos(fileControl.id);
       } else if (fileExtension === '.csv') {
         recordsProcessed = await this.processCsvFile(fileControl, clientId);
       } else if (isXlsx) {
@@ -248,16 +249,59 @@ export class FilesService {
 
       return recordsProcessed;
     } catch (error) {
+      // Log técnico completo para diagnóstico…
       this.logger.error(
         `Error processing file ${fileControl.originalName}: ${error.message}`,
         error.stack,
       );
+      // …pero al usuario le mostramos un mensaje claro y entendible.
+      const friendly = this.friendlyError(error?.message, fileControl.fileType);
       await this.prisma.fileControl.update({
         where: { id: fileControl.id },
-        data: { status: FileStatus.ERROR, errorMessage: error.message },
+        data: { status: FileStatus.ERROR, errorMessage: friendly },
       });
       throw error;
     }
+  }
+
+  /**
+   * Traduce errores técnicos del parseo (columnas faltantes, hoja inexistente,
+   * archivo dañado, etc.) a un mensaje claro para el usuario. El error técnico
+   * original queda en los logs.
+   */
+  private friendlyError(rawMessage: string | undefined, fileType: FileType): string {
+    const label =
+      fileType === FileType.TRANSACTIONS
+        ? 'Transacciones (EfevooPay)'
+        : fileType === FileType.SETTLEMENTS
+          ? 'POSRE'
+          : 'AMEX';
+
+    const m = (rawMessage || '').toLowerCase();
+    const looksLikeTemplateMismatch =
+      m.includes('out of bounds') ||
+      m.includes('excel supports columns') ||
+      m.includes('column') ||
+      m.includes('worksheet') ||
+      m.includes('sheet') ||
+      m.includes('header') ||
+      m.includes('encabezado') ||
+      m.includes('cannot read') ||
+      m.includes('undefined') ||
+      m.includes('null');
+
+    if (looksLikeTemplateMismatch) {
+      return (
+        `El archivo no coincide con la plantilla esperada de ${label}. ` +
+        `Verifica que estés cargando el archivo correcto en la sección correcta ` +
+        `y que conserve el formato original (encabezados y columnas).`
+      );
+    }
+
+    return (
+      `No se pudo procesar el archivo de ${label}. ` +
+      `Revisa que no esté dañado y que corresponda a la plantilla esperada.`
+    );
   }
 
   private async processTransaccionesOrAmex(
@@ -606,6 +650,59 @@ export class FilesService {
     if (excludedCount > 0) {
       this.logger.log(
         `[Cancelaciones] Se marcaron ${excludedCount} pagos originales como CANCELLED y excluidos debido a cancelaciones en el archivo.`,
+      );
+    }
+
+    return excludedCount;
+  }
+
+  /**
+   * Exclusión simétrica en POSRE: cuando llega un reverso (settlement con monto
+   * negativo => status CANCELLED), marca también la liquidación original (+X)
+   * con la misma identidad (auth + tarjeta + afiliación) y monto equivalente
+   * como CANCELLED, para que el par pago/reverso netee a $0 y no quede como
+   * POSRE activo pendiente. Es el equivalente POSRE de
+   * excludeOriginalPaymentsForCancellations (lado Transacciones).
+   *
+   * Se buscan los originales en TODOS los settlements (no solo este archivo),
+   * por si el pago original se cargó en una carga previa.
+   */
+  private async excludeOriginalSettlementsForReversos(
+    fileId: bigint,
+  ): Promise<number> {
+    const reversos = await this.prisma.settlement.findMany({
+      where: { fileId, status: 'CANCELLED', amount: { lt: 0 } },
+      select: {
+        authorizationNumber: true,
+        reference: true,
+        afiliacion: true,
+        amount: true,
+      },
+    });
+
+    let excludedCount = 0;
+
+    for (const rev of reversos) {
+      if (!rev.authorizationNumber) continue;
+      const target = Math.abs(rev.amount); // monto del pago original (+X)
+
+      const updateResult = await this.prisma.settlement.updateMany({
+        where: {
+          authorizationNumber: rev.authorizationNumber,
+          reference: rev.reference ?? undefined,
+          afiliacion: rev.afiliacion ?? undefined,
+          status: 'ACTIVE',
+          amount: { gte: target - 0.01, lte: target + 0.01 },
+        },
+        data: { status: 'CANCELLED' },
+      });
+
+      excludedCount += updateResult.count;
+    }
+
+    if (excludedCount > 0) {
+      this.logger.log(
+        `[POSRE] Se marcaron ${excludedCount} liquidaciones originales como CANCELLED debido a reversos en el archivo.`,
       );
     }
 
