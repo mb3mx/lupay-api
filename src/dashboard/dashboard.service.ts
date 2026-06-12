@@ -294,8 +294,8 @@ export class DashboardService {
         afiliacion: tx.afiliacion ?? tx.client?.afiliacion ?? '',
         montoTx: tx.amount,
         importeLupay: tx.importeLupay ?? 0,
-        importePosre: rec?.settlement?.amount ?? '',
-        diferencia: rec?.amountDifference ?? 0,
+        importePosre: rec?.settlement ? (rec.settlement.settledAmount ?? 0) : 0,
+        diferencia: Math.round(((rec?.settlement ? (rec.settlement.settledAmount ?? 0) : 0) - (tx.importeLupay ?? 0)) * 100) / 100,
         fecha: tx.transactionDate.toISOString().split('T')[0],
       };
       if (!rec) notFound.push(row);

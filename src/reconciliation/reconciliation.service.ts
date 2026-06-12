@@ -95,18 +95,22 @@ export class ReconciliationService {
     const data = transactions.map((tx) => {
       const rec = tx.reconciliations[0];
       const estado = rec ? rec.status : 'NOT_FOUND';
+      const importePosre = rec?.settlement ? (rec.settlement.settledAmount ?? 0) : 0;
+      const importeLupay = tx.importeLupay ?? 0;
+      const diff = Math.round((importePosre - importeLupay) * 100) / 100;
       return {
         id: tx.id.toString(),
         status: estado,
-        amountDifference: rec?.amountDifference ?? null,
+        amountDifference: diff,
         transaction: {
           authorizationNumber: tx.authorizationNumber,
           cardNumber: tx.cardNumber,
           amount: tx.amount,
+          importeLupay: tx.importeLupay,
           cardBrand: tx.cardBrand,
           afiliacion: tx.afiliacion,
           transactionDate: tx.transactionDate,
-          client: { name: tx.client.name },
+          client: { name: tx.merchantName || tx.client.name },
           file: tx.file
             ? { originalName: tx.file.originalName, uploadedAt: tx.file.createdAt }
             : null,
@@ -114,7 +118,7 @@ export class ReconciliationService {
         settlement: rec?.settlement
           ? {
               authorizationNumber: rec.settlement.authorizationNumber,
-              amount: rec.settlement.amount,
+              amount: rec.settlement.settledAmount ?? 0,
               montoPagar: rec.settlement.montoPagar,
               settlementDate: rec.settlement.settlementDate,
               file: rec.settlement.file
