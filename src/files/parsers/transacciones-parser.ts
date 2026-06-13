@@ -45,6 +45,7 @@ function parseCardBrand(marca: string | null): CardBrand {
   if (m === 'MC' || m.includes('MASTER')) return CardBrand.MASTERCARD;
   if (m.includes('VISA')) return CardBrand.VISA;
   if (m.includes('AMEX')) return CardBrand.AMEX;
+   if (m.includes('CARNET')) return CardBrand.CARNET;
   return CardBrand.OTHER;
 }
 

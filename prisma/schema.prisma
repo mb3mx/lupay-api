@@ -19,6 +19,7 @@ enum CardBrand {
   VISA
   MASTERCARD
   AMEX
+  CARNET
   OTHER
 }
 

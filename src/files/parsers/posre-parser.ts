@@ -19,6 +19,7 @@ function parseCardBrand(descripcion: string | null): CardBrand {
   if (d.includes('MASTERCARD') || d.includes('MC')) return CardBrand.MASTERCARD;
   if (d.includes('VISA')) return CardBrand.VISA;
   if (d.includes('AMEX')) return CardBrand.AMEX;
+  if (d.includes('CARNET')) return CardBrand.CARNET;
   return CardBrand.OTHER;
 }
 
@@ -90,6 +91,10 @@ export class PosreParser {
     const colFechaConsumo = idx('fecha_consumo');
     const colHoraConsumo = idx('hora_consumo');
     const colFechaLiq = idx('FechaLiq');
+    const colTasa = idx('Tasa');
+    const colIva = idx('Iva');
+    const colSobretasa = idx('Sobretasa');
+    const colIvaSobretasa = idx('Iva_sobretasa');
 
     for (let rowNum = headerRow + 1; rowNum <= ws.rowCount; rowNum++) {
       const row = ws.getRow(rowNum);
@@ -102,14 +107,26 @@ export class PosreParser {
       // Quitar ceros a la izquierda
       const afiliacion = afilRaw.replace(/^0+/, '') || null;
 
+      let montoPagar: number;
+      if (colTasa > 0 || colIva > 0) {
+        const tasa = colTasa > 0 ? Number(row.getCell(colTasa).value ?? 0) : 0;
+        const iva = colIva > 0 ? Number(row.getCell(colIva).value ?? 0) : 0;
+        const sobretasa = colSobretasa > 0 ? Number(row.getCell(colSobretasa).value ?? 0) : 0;
+        const ivaSobretasa = colIvaSobretasa > 0 ? Number(row.getCell(colIvaSobretasa).value ?? 0) : 0;
+        const sign = amount < 0 ? -1 : 1;
+        montoPagar = Math.round((amount - (tasa + iva + sobretasa + ivaSobretasa) * sign) * 100) / 100;
+      } else {
+        montoPagar =
+          row.getCell(colMontoPagar).value != null
+            ? Number(row.getCell(colMontoPagar).value)
+            : amount;
+      }
+
       yield {
         authorizationNumber: authRaw.toString().trim(),
         cardNumber: row.getCell(colCuenta).value?.toString().trim() || null,
         amount,
-        montoPagar:
-          row.getCell(colMontoPagar).value != null
-            ? Number(row.getCell(colMontoPagar).value)
-            : null,
+        montoPagar,
         cardBrand: parseCardBrand(
           row.getCell(colDesc).value?.toString() || null,
         ),

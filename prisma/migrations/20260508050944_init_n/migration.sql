@@ -2,7 +2,7 @@
 CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'USER');
 
 -- CreateEnum
-CREATE TYPE "CardBrand" AS ENUM ('VISA', 'MASTERCARD', 'AMEX', 'OTHER');
+CREATE TYPE "CardBrand" AS ENUM ('VISA', 'MASTERCARD', 'AMEX','CARNET', 'OTHER');
 
 -- CreateEnum
 CREATE TYPE "TransactionStatus" AS ENUM ('ACTIVE', 'CANCELLED', 'REFUNDED');

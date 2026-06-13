@@ -127,6 +127,7 @@ export class TransactionsService {
     if (normalized.includes('VISA')) return CardBrand.VISA;
     if (normalized.includes('MASTER') || normalized.includes('MC')) return CardBrand.MASTERCARD;
     if (normalized.includes('AMEX') || normalized.includes('AMERICAN')) return CardBrand.AMEX;
+    if (normalized.includes('CARNET')) return CardBrand.CARNET;
     return CardBrand.OTHER;
   }
 

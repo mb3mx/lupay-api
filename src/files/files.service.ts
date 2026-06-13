@@ -16,6 +16,7 @@ import { XlsxParser, ParsedRow as XlsxRow } from './parsers/xlsx-parser';
 import { TransaccionesParser } from './parsers/transacciones-parser';
 import { PosreParser } from './parsers/posre-parser';
 import { AmexParser } from './parsers/amex-parser';
+import { AmexSettlementParser } from './parsers/amex-settlement-parser';
 import { Readable } from 'stream';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -195,16 +196,19 @@ export class FilesService {
 
       if (
         isXlsx &&
-        (fileControl.fileType === FileType.TRANSACTIONS ||
-          fileControl.fileType === FileType.AMEX)
+        fileControl.fileType === FileType.TRANSACTIONS
       ) {
         recordsProcessed = await this.processTransaccionesOrAmex(
           fileControl,
           clientId,
         );
         await this.excludeOriginalPaymentsForCancellations(fileControl.id);
-      } else if (isXlsx && fileControl.fileType === FileType.SETTLEMENTS) {
-        recordsProcessed = await this.processPosre(fileControl, clientId);
+      } else if (
+        isXlsx &&
+        (fileControl.fileType === FileType.SETTLEMENTS ||
+          fileControl.fileType === FileType.AMEX)
+      ) {
+        recordsProcessed = await this.processPosreOrAmexSettlement(fileControl, clientId);
         await this.excludeOriginalSettlementsForReversos(fileControl.id);
       } else if (fileExtension === '.csv') {
         recordsProcessed = await this.processCsvFile(fileControl, clientId);
@@ -229,12 +233,12 @@ export class FilesService {
         `File processed: ${fileControl.originalName} (${recordsProcessed} records)`,
       );
 
-      // Auto-conciliación: ejecutar al cargar Transacciones O POSRE.
-      // AMEX no entra (no concilia contra POSRE).
+      // Auto-conciliación: ejecutar al cargar Transacciones, POSRE o AMEX.
       let autoRecon = { matched: 0, amountMismatch: 0, notFound: 0 };
       if (
         fileControl.fileType === FileType.TRANSACTIONS ||
-        fileControl.fileType === FileType.SETTLEMENTS
+        fileControl.fileType === FileType.SETTLEMENTS ||
+        fileControl.fileType === FileType.AMEX
       ) {
         try {
           autoRecon = await this.runAutoReconciliation();
@@ -363,14 +367,15 @@ export class FilesService {
     return inserted + duplicates + conflicts.length;
   }
 
-  private async processPosre(
+  private async processPosreOrAmexSettlement(
     fileControl: FileControl,
     clientId: bigint,
   ): Promise<number> {
-    const parser = new PosreParser();
+    const isAmex = fileControl.fileType === FileType.AMEX;
+    const parser = isAmex ? new AmexSettlementParser() : new PosreParser();
     let inserted = 0;
     let duplicates = 0;
-    // POSRE ya no produce conflictos: cuando la identidad logica coincide pero
+    // POSRE/AMEX ya no produce conflictos: cuando la identidad logica coincide pero
     // el monto difiere (reverso), el settlement se inserta como adicional.
     // Mantenemos el array vacio para preservar el shape de __processStats y la
     // estadistica conflictCount=0 en file_control.
