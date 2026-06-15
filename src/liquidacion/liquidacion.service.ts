@@ -41,12 +41,11 @@ export class LiquidacionService {
       });
     }
 
-    // Obtener transacciones conciliadas del día
+    // Obtener todas las transacciones activas del día (no requerimos que estén conciliadas)
     const transactions = await this.prisma.transaction.findMany({
       where: {
         isExcluded: false,
         transactionDate: { gte: from, lte: to },
-        reconciliations: { some: { status: 'MATCHED' } },
       },
       include: {
         client: {
