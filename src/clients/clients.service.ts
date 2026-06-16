@@ -53,8 +53,9 @@ export class ClientsService {
   }
 
   async findById(id: any): Promise<Client | null> {
+    const clientId = typeof id === 'bigint' ? id : BigInt(id);
     return this.prisma.client.findUnique({
-      where: { id, isActive: true },
+      where: { id: clientId, isActive: true },
       include: {
         terminals: {
           where: { isActive: true },
@@ -93,9 +94,10 @@ export class ClientsService {
   }
 
   async update(id: any, data: UpdateClientDto): Promise<Client> {
+    const clientId = typeof id === 'bigint' ? id : BigInt(id);
     try {
       return await this.prisma.client.update({
-        where: { id },
+        where: { id: clientId },
         data,
       });
     } catch (error) {

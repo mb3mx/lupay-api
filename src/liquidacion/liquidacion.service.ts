@@ -4,7 +4,7 @@ import * as ExcelJS from 'exceljs';
 
 @Injectable()
 export class LiquidacionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async generate(fecha: string, force = false) {
     const from = new Date(fecha + 'T00:00:00.000Z');
@@ -95,6 +95,22 @@ export class LiquidacionService {
     for (const [key, data] of Object.entries(porMerchant)) {
       const cliente = clientesByName[key];
       if (!cliente) continue;
+      if (!cliente.liquidadoraId) {
+        throw new ConflictException({
+          code: 'CLIENT_MISSING_LIQUIDADORA',
+          message: `El cliente "${cliente.name}" está registrado pero no tiene una liquidadora configurada en su perfil.`,
+          clientId: cliente.id.toString(),
+          clientName: cliente.name,
+        });
+      }
+      if (!cliente.sindicatoId) {
+        throw new ConflictException({
+          code: 'CLIENT_MISSING_SINDICATO',
+          message: `El cliente "${cliente.name}" está registrado pero no tiene un sindicato configurado en su perfil.`,
+          clientId: cliente.id.toString(),
+          clientName: cliente.name,
+        });
+      }
       porCliente[key] = {
         client: cliente,
         montoBruto: data.montoBruto,
