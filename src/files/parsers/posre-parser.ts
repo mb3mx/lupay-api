@@ -58,9 +58,11 @@ function parseFechaLiq(raw: unknown): Date {
 }
 
 export class PosreParser {
-  async *parse(filePath: string): AsyncGenerator<PosreRow> {
+  async *parse(source: string | Buffer): AsyncGenerator<PosreRow> {
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(filePath);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (Buffer.isBuffer(source)) await workbook.xlsx.load(source as any);
+    else await workbook.xlsx.readFile(source);
 
     const ws =
       workbook.getWorksheet('POSRE') || workbook.worksheets[0];
