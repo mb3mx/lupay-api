@@ -79,7 +79,11 @@ export class ClientsService {
 
   async create(data: CreateClientDto): Promise<Client> {
     try {
-      return await this.prisma.client.create({ data });
+      const payload = {
+        ...data,
+        taxId: (data.taxId && data.taxId.trim()) ? data.taxId.trim() : null,
+      };
+      return await this.prisma.client.create({ data: payload });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
@@ -96,9 +100,13 @@ export class ClientsService {
   async update(id: any, data: UpdateClientDto): Promise<Client> {
     const clientId = typeof id === 'bigint' ? id : BigInt(id);
     try {
+      const payload = {
+        ...data,
+        taxId: data.taxId !== undefined ? ((data.taxId && data.taxId.trim()) ? data.taxId.trim() : null) : undefined,
+      };
       return await this.prisma.client.update({
         where: { id: clientId },
-        data,
+        data: payload,
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {

@@ -27,10 +27,10 @@ export class CreateClientDto {
   @IsNotEmpty()
   businessName: string;
 
-  @ApiProperty({ example: 'ABC123456XYZ' })
+  @ApiPropertyOptional({ example: 'ABC123456XYZ' })
   @IsString()
-  @IsNotEmpty()
-  taxId: string;
+  @IsOptional()
+  taxId?: string;
 
   @ApiProperty({ example: 2.5, description: 'Commission percentage' })
   @IsNumber()

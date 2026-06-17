@@ -140,7 +140,7 @@ model Client {
   code             String  @unique
   name             String
   businessName     String  @map("business_name")
-  taxId            String  @unique @map("tax_id")
+  taxId            String? @unique @map("tax_id")
   commissionTotal  Float   @default(0) @map("commission_total")
   afiliacion       String? @unique @map("afiliacion")
 

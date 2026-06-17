@@ -24,6 +24,7 @@ import {
 import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UploadFileDto } from './dto/upload-file.dto';
+import { ResolveImportDto } from './dto/resolve-import.dto';
 import { GetUser } from '../common/decorators/get-user.decorator';
 
 @ApiTags('Files')
@@ -87,6 +88,48 @@ export class FilesController {
       user.userId,
     );
 
+    return {
+      data: {
+        fileId: fileControl.id,
+        originalName: fileControl.originalName,
+        fileType: fileControl.fileType,
+        status: 'PROCESSING',
+      },
+    };
+  }
+
+  @Post('validate')
+  @ApiOperation({ summary: 'Validate transactions file and detect client mismatches before uploading' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    }),
+  )
+  async validateFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() uploadFileDto: UploadFileDto,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    const result = await this.filesService.validateFile(
+      file,
+      uploadFileDto.fileType,
+    );
+    return { data: result };
+  }
+
+  @Post('import-validated')
+  @ApiOperation({ summary: 'Import validated file after resolving client catalog issues' })
+  async importValidated(
+    @Body() dto: ResolveImportDto,
+    @GetUser() user: any,
+  ) {
+    const fileControl = await this.filesService.importValidatedFile(
+      dto,
+      user.userId,
+    );
     return {
       data: {
         fileId: fileControl.id,

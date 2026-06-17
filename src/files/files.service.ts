@@ -21,6 +21,7 @@ import { Readable } from 'stream';
 import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
+import { ResolveImportDto } from './dto/resolve-import.dto';
 
 export interface ConflictDetail {
   auth: string;
@@ -712,5 +713,208 @@ export class FilesService {
     }
 
     return excludedCount;
+  }
+
+  async validateFile(
+    file: Express.Multer.File,
+    fileType: FileType,
+  ): Promise<{ tempFileId: string; ready: boolean; issues: any }> {
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+    const tempFileId = `${uuidv4()}${fileExtension}`;
+    const tempDir = path.join(this.uploadPath, 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    const tempFilePath = path.join(tempDir, tempFileId);
+    await this.saveFile(file, tempFilePath);
+
+    // Si no es transacciones, no validamos el catálogo de clientes
+    if (fileType !== FileType.TRANSACTIONS) {
+      return { tempFileId, ready: true, issues: { updateEmails: [], updateNames: [], newClients: [] } };
+    }
+
+    const isXlsx = ['.xlsx', '.xls'].includes(fileExtension);
+    if (!isXlsx) {
+      return { tempFileId, ready: true, issues: { updateEmails: [], updateNames: [], newClients: [] } };
+    }
+
+    const parser = new TransaccionesParser();
+    const comerciosUnicos = new Map<string, { nombre: string; email: string }>();
+
+    for await (const row of parser.parse(tempFilePath)) {
+      if (!row.merchantName || !row.email) continue;
+      const nombre = row.merchantName.trim();
+      const email = row.email.trim().toLowerCase();
+      if (!nombre || !email) continue;
+
+      const key = `${nombre}::${email}`;
+      if (!comerciosUnicos.has(key)) {
+        comerciosUnicos.set(key, { nombre, email });
+      }
+    }
+
+    const listadoComercios = Array.from(comerciosUnicos.values());
+    if (listadoComercios.length === 0) {
+      return { tempFileId, ready: true, issues: { updateEmails: [], updateNames: [], newClients: [] } };
+    }
+
+    const nombresArchivo = listadoComercios.map(c => c.nombre);
+    const correosArchivo = listadoComercios.map(c => c.email);
+
+    // Consulta en lote
+    const clientesDB = await this.prisma.client.findMany({
+      where: {
+        OR: [
+          { name: { in: nombresArchivo } },
+          { contactEmail: { in: correosArchivo } }
+        ]
+      }
+    });
+
+    const updateEmails: any[] = [];
+    const updateNames: any[] = [];
+    const newClients: any[] = [];
+
+    for (const item of listadoComercios) {
+      // 1. Coincidencia exacta
+      const exactMatch = clientesDB.find(
+        c => c.name.toLowerCase().trim() === item.nombre.toLowerCase().trim() &&
+             c.contactEmail?.toLowerCase().trim() === item.email
+      );
+      if (exactMatch) continue;
+
+      // 2. Coincidencia por nombre pero con correo diferente
+      const nameMatch = clientesDB.find(
+        c => c.name.toLowerCase().trim() === item.nombre.toLowerCase().trim()
+      );
+      if (nameMatch) {
+        updateEmails.push({
+          clientId: nameMatch.id.toString(),
+          name: nameMatch.name,
+          currentEmail: nameMatch.contactEmail || '',
+          newEmail: item.email
+        });
+        continue;
+      }
+
+      // 3. Coincidencia por correo pero con nombre diferente
+      const emailMatch = clientesDB.find(
+        c => c.contactEmail?.toLowerCase().trim() === item.email
+      );
+      if (emailMatch) {
+        updateNames.push({
+          clientId: emailMatch.id.toString(),
+          email: emailMatch.contactEmail,
+          currentName: emailMatch.name,
+          newName: item.nombre
+        });
+        continue;
+      }
+
+      // 4. No hay coincidencia (Cliente nuevo)
+      newClients.push({
+        name: item.nombre,
+        email: item.email
+      });
+    }
+
+    const ready = updateEmails.length === 0 && updateNames.length === 0 && newClients.length === 0;
+
+    return {
+      tempFileId,
+      ready,
+      issues: {
+        updateEmails,
+        updateNames,
+        newClients
+      }
+    };
+  }
+
+  async importValidatedFile(
+    dto: ResolveImportDto,
+    userId: any,
+  ): Promise<FileControl> {
+    const { tempFileId, originalName, fileType, clientId, resolvedIssues } = dto;
+
+    // 1. Aplicar resoluciones en una transacción de base de datos
+    await this.prisma.$transaction(async (tx) => {
+      // Actualizar correos y nombres
+      if (resolvedIssues?.updates && resolvedIssues.updates.length > 0) {
+        for (const update of resolvedIssues.updates) {
+          const uId = BigInt(update.clientId);
+          const dataToUpdate: any = {};
+          if (update.field === 'contactEmail') {
+            dataToUpdate.contactEmail = update.value.trim();
+          } else if (update.field === 'name') {
+            dataToUpdate.name = update.value.trim();
+          }
+          await tx.client.update({
+            where: { id: uId },
+            data: dataToUpdate,
+          });
+        }
+      }
+
+      // Crear nuevos clientes
+      if (resolvedIssues?.newClients && resolvedIssues.newClients.length > 0) {
+        for (const newCli of resolvedIssues.newClients) {
+          await tx.client.create({
+            data: {
+              code: newCli.code.trim(),
+              name: newCli.name.trim(),
+              businessName: newCli.name.trim(),
+              taxId: (newCli.taxId && newCli.taxId.trim()) ? newCli.taxId.trim() : null,
+              contactEmail: newCli.email.trim().toLowerCase(),
+              commissionTotal: Number(newCli.commissionTotal) || 0,
+              liquidadoraId: newCli.liquidadoraId ? BigInt(newCli.liquidadoraId) : undefined,
+              sindicatoId: newCli.sindicatoId ? BigInt(newCli.sindicatoId) : undefined,
+            },
+          });
+        }
+      }
+    });
+
+    // 2. Mover el archivo de la carpeta temporal a la carpeta de uploads definitiva
+    const tempDir = path.join(this.uploadPath, 'temp');
+    const tempFilePath = path.join(tempDir, tempFileId);
+    
+    if (!fs.existsSync(tempFilePath)) {
+      throw new BadRequestException('El archivo temporal no existe o ya fue procesado.');
+    }
+
+    const fileExtension = path.extname(tempFileId).toLowerCase();
+    const finalFileName = `${uuidv4()}${fileExtension}`;
+    const finalFilePath = path.join(this.uploadPath, finalFileName);
+
+    // Mover archivo
+    fs.renameSync(tempFilePath, finalFilePath);
+
+    // 3. Crear FileControl e iniciar procesamiento en background
+    const fileControl = await this.prisma.fileControl.create({
+      data: {
+        originalName: originalName || `import_${tempFileId}`,
+        fileName: finalFileName,
+        fileType,
+        filePath: finalFilePath,
+        fileSize: fs.statSync(finalFilePath).size,
+        status: FileStatus.PENDING,
+        uploadedBy: userId,
+      },
+    });
+
+    this.logger.log(
+      `File imported from temp ${tempFileId} to final ${finalFileName} for client ${clientId}`,
+    );
+
+    // Lanzar procesamiento en background
+    void this.processInBackground(
+      fileControl,
+      BigInt(clientId),
+      fileExtension,
+      userId,
+    );
+
+    return fileControl;
   }
 }
