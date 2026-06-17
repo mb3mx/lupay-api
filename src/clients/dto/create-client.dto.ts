@@ -66,7 +66,7 @@ export class CreateClientDto {
   @ApiPropertyOptional({ example: '012345678901234567', description: 'CLABE bancaria (18 digitos)' })
   @IsString()
   @IsOptional()
-  @Length(18, 18, { message: 'bankClabe debe tener exactamente 18 caracteres' })
+  @Length(18, 18, { message: 'La CLABE debe tener exactamente 18 dígitos numéricos.' })
   bankClabe?: string;
 
   @ApiPropertyOptional({ example: 'AFL00123' })
