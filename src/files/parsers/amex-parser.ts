@@ -54,9 +54,11 @@ function parseDate(raw: unknown): Date {
 }
 
 export class AmexParser {
-  async *parse(filePath: string): AsyncGenerator<AmexRow> {
+  async *parse(source: string | Buffer): AsyncGenerator<AmexRow> {
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(filePath);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (Buffer.isBuffer(source)) await workbook.xlsx.load(source as any);
+    else await workbook.xlsx.readFile(source);
 
     const ws =
       workbook.getWorksheet('DETALLE') || workbook.worksheets[0];

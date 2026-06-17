@@ -33,6 +33,7 @@ export interface ConflictDetail {
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
   private readonly uploadPath: string;
+  private readonly saveFiles: boolean;
 
   constructor(
     private readonly configService: ConfigService,
@@ -44,7 +45,9 @@ export class FilesService {
   ) {
     this.uploadPath =
       this.configService.get<string>('UPLOAD_DEST') || './uploads';
-    this.ensureUploadDirectory();
+    this.saveFiles =
+      this.configService.get<string>('SAVE_UPLOADED_FILES') !== 'false';
+    if (this.saveFiles) this.ensureUploadDirectory();
   }
 
   private ensureUploadDirectory() {
@@ -72,12 +75,11 @@ export class FilesService {
 
     const fileExtension = path.extname(file.originalname).toLowerCase();
     const fileName = `${uuidv4()}${fileExtension}`;
-    const filePath = path.join(this.uploadPath, fileName);
+    const filePath = this.saveFiles
+      ? path.join(this.uploadPath, fileName)
+      : '';
 
-    // Nota: la deduplicación se hace por registro (no por archivo).
-    // Registros ya existentes se detectan y reportan como duplicados o conflictos.
-
-    await this.saveFile(file, filePath);
+    if (this.saveFiles) await this.saveFile(file, filePath);
 
     const fileControl = await this.prisma.fileControl.create({
       data: {
@@ -101,6 +103,7 @@ export class FilesService {
       BigInt(clientId),
       fileExtension,
       userId,
+      this.saveFiles ? undefined : file.buffer,
     );
 
     return fileControl;
@@ -117,12 +120,14 @@ export class FilesService {
     clientId: bigint,
     fileExtension: string,
     userId: any,
+    buffer?: Buffer,
   ): Promise<void> {
     try {
       const recordsProcessed = await this.processFile(
         fileControl,
         clientId,
         fileExtension,
+        buffer,
       );
 
       const autoReconciliation = (fileControl as any).__autoRecon ?? null;
@@ -184,6 +189,7 @@ export class FilesService {
     fileControl: FileControl,
     clientId: bigint,
     fileExtension: string,
+    buffer?: Buffer,
   ): Promise<number> {
     try {
       await this.prisma.fileControl.update({
@@ -193,6 +199,8 @@ export class FilesService {
 
       let recordsProcessed = 0;
 
+      // source: buffer en memoria (SAVE_UPLOADED_FILES=false) o ruta en disco
+      const source: string | Buffer = buffer ?? fileControl.filePath;
       const isXlsx = ['.xlsx', '.xls'].includes(fileExtension);
 
       if (
@@ -202,6 +210,7 @@ export class FilesService {
         recordsProcessed = await this.processTransaccionesOrAmex(
           fileControl,
           clientId,
+          source,
         );
         await this.excludeOriginalPaymentsForCancellations(fileControl.id);
       } else if (
@@ -209,12 +218,12 @@ export class FilesService {
         (fileControl.fileType === FileType.SETTLEMENTS ||
           fileControl.fileType === FileType.AMEX)
       ) {
-        recordsProcessed = await this.processPosreOrAmexSettlement(fileControl, clientId);
+        recordsProcessed = await this.processPosreOrAmexSettlement(fileControl, clientId, source);
         await this.excludeOriginalSettlementsForReversos(fileControl.id);
       } else if (fileExtension === '.csv') {
-        recordsProcessed = await this.processCsvFile(fileControl, clientId);
+        recordsProcessed = await this.processCsvFile(fileControl, clientId, source);
       } else if (isXlsx) {
-        recordsProcessed = await this.processXlsxFile(fileControl, clientId);
+        recordsProcessed = await this.processXlsxFile(fileControl, clientId, source);
       } else {
         throw new BadRequestException(
           `Unsupported file format: ${fileExtension}`,
@@ -312,6 +321,7 @@ export class FilesService {
   private async processTransaccionesOrAmex(
     fileControl: FileControl,
     clientId: bigint,
+    source: string | Buffer,
   ): Promise<number> {
     const isAmex = fileControl.fileType === FileType.AMEX;
     const parser = isAmex ? new AmexParser() : new TransaccionesParser();
@@ -320,7 +330,7 @@ export class FilesService {
     let duplicates = 0;
     const conflicts: ConflictDetail[] = [];
 
-    for await (const row of parser.parse(fileControl.filePath)) {
+    for await (const row of parser.parse(source)) {
       let resolvedClientId = clientId;
       if (row.afiliacion) {
         const clientByAfil = await this.clientsService.findByAfiliacion(
@@ -371,6 +381,7 @@ export class FilesService {
   private async processPosreOrAmexSettlement(
     fileControl: FileControl,
     clientId: bigint,
+    source: string | Buffer,
   ): Promise<number> {
     const isAmex = fileControl.fileType === FileType.AMEX;
     const parser = isAmex ? new AmexSettlementParser() : new PosreParser();
@@ -382,7 +393,7 @@ export class FilesService {
     // estadistica conflictCount=0 en file_control.
     const conflicts: ConflictDetail[] = [];
 
-    for await (const row of parser.parse(fileControl.filePath)) {
+    for await (const row of parser.parse(source)) {
       let resolvedClientId = clientId;
       if (row.afiliacion) {
         const clientByAfil = await this.clientsService.findByAfiliacion(
@@ -516,9 +527,12 @@ export class FilesService {
   private async processCsvFile(
     fileControl: FileControl,
     clientId: bigint,
+    source: string | Buffer,
   ): Promise<number> {
     const parser = new CsvParser({ delimiter: ',', trim: true });
-    const stream = fs.createReadStream(fileControl.filePath);
+    const stream = Buffer.isBuffer(source)
+      ? Readable.from(source)
+      : fs.createReadStream(source);
     let count = 0;
 
     for await (const row of parser.parseStream(stream)) {
@@ -538,9 +552,12 @@ export class FilesService {
   private async processXlsxFile(
     fileControl: FileControl,
     clientId: bigint,
+    source: string | Buffer,
   ): Promise<number> {
     const parser = new XlsxParser();
-    const stream = fs.createReadStream(fileControl.filePath);
+    const stream = Buffer.isBuffer(source)
+      ? Readable.from(source)
+      : fs.createReadStream(source);
     let count = 0;
 
     for await (const row of parser.parseStream(stream)) {

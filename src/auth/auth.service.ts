@@ -220,6 +220,23 @@ export class AuthService {
     };
   }
 
+  /**
+   * Reemite un token nuevo para un usuario que aún tiene sesión válida.
+   * Lo usa el endpoint /auth/refresh (protegido por JwtAuthGuard): el aviso de
+   * expiración se dispara antes de vencer, así que el token actual sigue siendo
+   * válido y el guard permite la renovación.
+   */
+  async refresh(userId: string): Promise<AuthResponseDto> {
+    const user = await this.usersService.findByIdWithClient(userId);
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated');
+    }
+    return this.buildAuthResponse(user);
+  }
+
   async validateUser(userId: string): Promise<any> {
     return this.usersService.findById(userId);
   }

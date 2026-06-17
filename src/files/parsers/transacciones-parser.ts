@@ -108,9 +108,11 @@ function cellNum(cell: ExcelJS.Cell): number | null {
 }
 
 export class TransaccionesParser {
-  async *parse(filePath: string): AsyncGenerator<TransaccionRow> {
+  async *parse(source: string | Buffer): AsyncGenerator<TransaccionRow> {
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(filePath);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (Buffer.isBuffer(source)) await workbook.xlsx.load(source as any);
+    else await workbook.xlsx.readFile(source);
 
     const ws =
       workbook.getWorksheet('Transacciones ') ||

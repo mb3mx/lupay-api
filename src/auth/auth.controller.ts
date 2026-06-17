@@ -61,4 +61,14 @@ export class AuthController {
   async me(@GetUser() user: { userId: string }) {
     return this.authService.getMe(user.userId);
   }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Renovar el token (reemite uno nuevo si la sesión sigue válida)' })
+  @ApiResponse({ status: 200, type: AuthResponseDto })
+  async refresh(@GetUser() user: { userId: string }): Promise<AuthResponseDto> {
+    return this.authService.refresh(user.userId);
+  }
 }
