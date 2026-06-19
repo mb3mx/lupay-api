@@ -276,17 +276,19 @@ export class LiquidacionService {
     // Hoja 2: LIQ BUG por negocio
     const wsLiq = wb.addWorksheet('LIQ BUG');
     wsLiq.addRow([
-      'Negocio', 'Razón Social', 'Sindicato', 'Monto Settlement', 'Monto Bruto', 'Diferencia',
-      '% Comisión', 'Comisión', 'Pago Neto',
+      'Negocio', 'Razón Social', 'CLABE Empresa','Monto Liquidar', 'Sindicato', 'CLABE Sindicato', 
+      'Monto Posre', 'Diferencia', '% Cliente', 'Com. Cliente', 'Pago Cliente',
     ]);
     wsLiq.getRow(1).font = { bold: true };
     for (const item of liq.items) {
       wsLiq.addRow([
         item.client.name,
         item.liquidadora?.razonSocial ?? '',
-        item.client.sindicato?.nombre ?? '',
-        item.montoSettlement,
+        item.liquidadora?.clabe ?? '',
         item.montoBruto,
+        item.client.sindicato?.nombre ?? '',
+        item.client.sindicato?.clabe ?? '',
+        item.montoSettlement,
         Math.round((item.montoSettlement - item.montoBruto) * 100) / 100,
         `${(item.pctComision * 100).toFixed(2)}%`,
         item.comision,
