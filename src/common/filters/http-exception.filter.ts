@@ -37,12 +37,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message = exception.message;
     }
 
-    const errorResponse: ErrorResponse = {
+    const extraData = typeof exceptionResponse === 'object' ? (exceptionResponse as any) : {};
+    const errorResponse = {
       statusCode: status,
       message,
       error: HttpStatus[status] || 'Error',
       path: request.url,
       timestamp: new Date().toISOString(),
+      ...extraData,
     };
 
     this.logger.error(

@@ -13,6 +13,8 @@ import {
 } from '@prisma/client';
 import { FilterTransactionsDto } from './dto/filter-transactions.dto';
 import { ParsedRow } from '../files/parsers/csv-parser';
+import { TransaccionRow } from '../files/parsers/transacciones-parser';
+import { AmexRow } from '../files/parsers/amex-parser';
 
 // Excluded operation types
 const EXCLUDED_OPERATIONS = ['CANCELACION', 'DEVOLUCION', 'CANCELACIÓN', 'DEVOLUCIÓN'];
@@ -125,6 +127,7 @@ export class TransactionsService {
     if (normalized.includes('VISA')) return CardBrand.VISA;
     if (normalized.includes('MASTER') || normalized.includes('MC')) return CardBrand.MASTERCARD;
     if (normalized.includes('AMEX') || normalized.includes('AMERICAN')) return CardBrand.AMEX;
+    if (normalized.includes('CARNET')) return CardBrand.CARNET;
     return CardBrand.OTHER;
   }
 
@@ -170,7 +173,7 @@ export class TransactionsService {
   private shouldExclude(operationType: string | null): boolean {
     if (!operationType) return false;
     const normalized = operationType.toUpperCase().trim();
-    return EXCLUDED_OPERATIONS.some((op) => normalized.includes(op));
+    return !normalized.startsWith('PAGO');
   }
 
   private calculateLiquidationDate(transactionDate: Date, cardBrand: CardBrand): Date {
@@ -291,6 +294,106 @@ export class TransactionsService {
       },
       orderBy: { transactionDate: 'desc' },
     });
+  }
+
+  async createFromTransaccionRow(
+    row: TransaccionRow | AmexRow,
+    fileId: any,
+    clientId: any,
+  ): Promise<
+    | { kind: 'created'; record: Transaction }
+    | { kind: 'duplicate' }
+    | { kind: 'conflict'; existingAmount: number; newAmount: number; auth: string }
+  > {
+    const liquidationDate = this.calculateLiquidationDate(
+      row.transactionDate,
+      row.cardBrand,
+    );
+
+    // Verificar si ya existe un registro con la misma identidad lógica
+    // (mismo auth + tarjeta + fecha + afiliación). Si existe:
+    //   - Mismo monto  → duplicado (ignorar)
+    //   - Monto distinto → conflicto (reportar, no insertar)
+    const maskedCard = row.cardNumber
+      ? this.maskCardNumber(row.cardNumber)
+      : null;
+
+    if (row.authorizationNumber && maskedCard) {
+      const existing = await this.prisma.transaction.findFirst({
+        where: {
+          authorizationNumber: row.authorizationNumber,
+          cardNumber: maskedCard,
+          transactionDate: row.transactionDate,
+          afiliacion: row.afiliacion || undefined,
+        },
+        select: { id: true, amount: true },
+      });
+
+      if (existing) {
+        if (Math.abs(existing.amount - row.amount) > 0.01) {
+          return {
+            kind: 'conflict',
+            existingAmount: existing.amount,
+            newAmount: row.amount,
+            auth: row.authorizationNumber,
+          };
+        }
+        return { kind: 'duplicate' };
+      }
+    }
+
+    try {
+      const record = await this.prisma.transaction.create({
+        data: {
+          transactionId: row.transactionId || undefined,
+          authorizationNumber: row.authorizationNumber || undefined,
+          reference: row.reference || undefined,
+          amount: row.amount,
+          fee: row.fee,
+          iva: row.iva,
+          importeLupay: row.importeLupay,
+          cardBrand: row.cardBrand,
+          cardNumber: row.cardNumber
+            ? this.maskCardNumber(row.cardNumber)
+            : undefined,
+          status: TransactionStatus.ACTIVE,
+          operationType: row.operationType,
+          tipoPago: row.tipoPago || undefined,
+          afiliacion: row.afiliacion || undefined,
+          merchantName: row.merchantName || undefined,
+          // Campos preservados del Excel completo
+          adquiriente: row.adquiriente || undefined,
+          fiid: row.fiid || undefined,
+          hora: row.hora || undefined,
+          modoEntrada: row.modoEntrada || undefined,
+          metodoAutenticacion: row.metodoAutenticacion || undefined,
+          eci: row.eci || undefined,
+          tipoTarjeta: row.tipoTarjeta || undefined,
+          tasaComision: row.tasaComision || undefined,
+          tasaSobretasa: row.tasaSobretasa || undefined,
+          montoSobretasa: row.montoSobretasa ?? undefined,
+          ivaSobretasa: row.ivaSobretasa ?? undefined,
+          sucursal: row.sucursal || undefined,
+          producto: row.producto || undefined,
+          terminalSerial: row.terminalSerial || undefined,
+          email: row.email || undefined,
+          propina: row.propina ?? undefined,
+          transactionDate: row.transactionDate,
+          liquidationDate,
+          clientCommission: 0,
+          netToClient: row.importeLupay || 0,
+          isExcluded: row.isExcluded,
+          exclusionReason: row.exclusionReason || undefined,
+          clientId,
+          fileId,
+        },
+      });
+      return { kind: 'created', record };
+    } catch (e) {
+      // Si por alguna razón pasa el constraint único, lo tratamos como duplicado
+      if (e?.code === 'P2002') return { kind: 'duplicate' };
+      throw e;
+    }
   }
 
   async getTransactionsForPayout(clientId: any, payoutDate: Date): Promise<Transaction[]> {

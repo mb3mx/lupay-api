@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumberString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { FileType } from '../../common/enums';
 
@@ -8,8 +8,8 @@ export class UploadFileDto {
   @IsNotEmpty()
   fileType: FileType;
 
-  @ApiProperty({ description: 'Client ID for the file data' })
-  @IsUUID()
+  @ApiProperty({ description: 'Client ID (numeric)' })
+  @IsNumberString()
   @IsNotEmpty()
-  clientId: any;
+  clientId: string;
 }

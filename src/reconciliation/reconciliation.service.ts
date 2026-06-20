@@ -33,6 +33,182 @@ export class ReconciliationService {
     private readonly settlementsService: SettlementsService,
   ) {}
 
+  // Devuelve TODAS las transacciones del rango con su estado de conciliación
+  // (incluye las MATCHED, AMOUNT_MISMATCH y las que NO tienen match = NOT_FOUND)
+  async getResults(params: {
+    dateFrom?: string;
+    dateTo?: string;
+    status?: string;
+    auth?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: any[]; meta: any }> {
+    const { dateFrom, dateTo, status, auth, page = 1, limit = 20 } = params;
+    const authTrimmed = auth?.trim();
+
+    const where: any = { isExcluded: false };
+
+    // Si viene búsqueda por autorización, ignora rango de fechas y status
+    // (búsqueda global por # de autorización desde el header).
+    if (authTrimmed) {
+      where.authorizationNumber = authTrimmed;
+    } else {
+      if (dateFrom && dateTo) {
+        where.transactionDate = {
+          gte: new Date(dateFrom + 'T00:00:00.000Z'),
+          lte: new Date(dateTo + 'T23:59:59.999Z'),
+        };
+      }
+
+      if (status === 'NOT_FOUND') {
+        where.reconciliations = { none: {} };
+      } else if (status === 'MATCHED' || status === 'AMOUNT_MISMATCH') {
+        where.reconciliations = { some: { status } };
+      }
+    }
+
+    const [transactions, total] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { transactionDate: 'desc' },
+        include: {
+          client: { select: { name: true, afiliacion: true } },
+          file: { select: { originalName: true, createdAt: true } },
+          reconciliations: {
+            include: {
+              settlement: {
+                include: {
+                  file: { select: { originalName: true, createdAt: true } },
+                },
+              },
+            },
+            take: 1,
+          },
+        },
+      }),
+      this.prisma.transaction.count({ where }),
+    ]);
+
+    // Mapear cada transacción a un formato uniforme con su estado real
+    const data = transactions.map((tx) => {
+      const rec = tx.reconciliations[0];
+      const estado = rec ? rec.status : 'NOT_FOUND';
+      const importePosre = rec?.settlement ? (rec.settlement.settledAmount ?? 0) : 0;
+      const importeLupay = tx.importeLupay ?? 0;
+      const diff = Math.round((importePosre - importeLupay) * 100) / 100;
+      return {
+        id: tx.id.toString(),
+        status: estado,
+        amountDifference: diff,
+        transaction: {
+          authorizationNumber: tx.authorizationNumber,
+          cardNumber: tx.cardNumber,
+          amount: tx.amount,
+          importeLupay: tx.importeLupay,
+          cardBrand: tx.cardBrand,
+          afiliacion: tx.afiliacion,
+          transactionDate: tx.transactionDate,
+          client: { name: tx.merchantName || tx.client.name },
+          file: tx.file
+            ? { originalName: tx.file.originalName, uploadedAt: tx.file.createdAt }
+            : null,
+        },
+        settlement: rec?.settlement
+          ? {
+              authorizationNumber: rec.settlement.authorizationNumber,
+              amount: rec.settlement.settledAmount ?? 0,
+              montoPagar: rec.settlement.montoPagar,
+              settlementDate: rec.settlement.settlementDate,
+              file: rec.settlement.file
+                ? {
+                    originalName: rec.settlement.file.originalName,
+                    uploadedAt: rec.settlement.file.createdAt,
+                  }
+                : null,
+            }
+          : null,
+      };
+    });
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  // Devuelve las fechas que tienen transacciones cargadas (más reciente primero)
+  async getAvailableDates(): Promise<string[]> {
+    const rows = await this.prisma.transaction.findMany({
+      where: { isExcluded: false },
+      select: { transactionDate: true },
+      distinct: ['transactionDate'],
+      orderBy: { transactionDate: 'desc' },
+    });
+    // Normalizar a YYYY-MM-DD (UTC)
+    const dates = new Set<string>();
+    for (const r of rows) {
+      dates.add(r.transactionDate.toISOString().split('T')[0]);
+    }
+    return Array.from(dates).sort().reverse();
+  }
+
+  async reconcileByDate(date: string): Promise<ReconciliationResult> {
+    const start = new Date(date + 'T00:00:00.000Z');
+    const end = new Date(date + 'T23:59:59.999Z');
+
+    const transactions = await this.prisma.transaction.findMany({
+      where: {
+        isExcluded: false,
+        transactionDate: { gte: start, lte: end },
+        reconciliations: { none: {} },
+      },
+    });
+
+    let matched = 0;
+    let notFound = 0;
+    let amountMismatch = 0;
+
+    for (const transaction of transactions) {
+      const result = await this.reconcileTransaction(
+        transaction,
+        transaction.clientId,
+      );
+      if (result.status === ReconciliationStatus.MATCHED) matched++;
+      else if (result.status === ReconciliationStatus.NOT_FOUND) notFound++;
+      else if (result.status === ReconciliationStatus.AMOUNT_MISMATCH) amountMismatch++;
+    }
+
+    this.logger.log(
+      `Reconciliation by date ${date}: ${matched} matched, ${notFound} not found, ${amountMismatch} mismatch`,
+    );
+
+    return { matched, notFound, amountMismatch, total: transactions.length };
+  }
+
+  async getUnmatchedByDate(date: string): Promise<Transaction[]> {
+    const start = new Date(date + 'T00:00:00.000Z');
+    const end = new Date(date + 'T23:59:59.999Z');
+
+    return this.prisma.transaction.findMany({
+      where: {
+        isExcluded: false,
+        transactionDate: { gte: start, lte: end },
+        reconciliations: { none: {} },
+      },
+      include: {
+        client: { select: { id: true, name: true, afiliacion: true } },
+      },
+      orderBy: { amount: 'desc' },
+    });
+  }
+
   async reconcileClient(data: ReconcileDto): Promise<ReconciliationResult> {
     const { clientId } = data;
 
@@ -69,23 +245,61 @@ export class ReconciliationService {
     };
   }
 
+  // Compara los últimos 4 dígitos de tarjeta entre transacción y settlement
+  private sameCard(transaction: Transaction, settlement: Settlement): boolean {
+    const last4 = (v?: string | null) =>
+      (v || '').replace(/\D/g, '').slice(-4);
+    const txCard = last4(transaction.cardNumber);
+    const stCard = last4(settlement.reference); // POSRE guarda num_cuenta en reference
+    if (!txCard || !stCard) return false;
+    return txCard === stCard;
+  }
+
   private async reconcileTransaction(
     transaction: Transaction,
     clientId: any,
   ): Promise<{ status: ReconciliationStatus; reconciliation?: Reconciliation }> {
-    // Priority 1: Match by authorization number
+    // ── Estrategia de 3 niveles: auth → tarjeta → monto ──────────────
     if (transaction.authorizationNumber) {
-      const settlement = await this.settlementsService.findByAuthorizationNumber(
-        transaction.authorizationNumber,
-        clientId,
-      );
+      // Traer TODOS los settlements con ese auth aún no conciliados
+      const candidates = await this.prisma.settlement.findMany({
+        where: {
+          authorizationNumber: transaction.authorizationNumber,
+          reconciliations: { none: {} },
+        },
+      });
 
-      if (settlement) {
-        return this.createReconciliation(
-          transaction,
-          settlement,
-          ReconciliationPriority.AUTHORIZATION_NUMBER,
+      if (candidates.length > 0) {
+        // Nivel 2: filtrar por misma tarjeta (descarta colisiones de auth
+        // entre emisores distintos que comparten el mismo num_autorizacion)
+        const sameCardMatches = candidates.filter((s) =>
+          this.sameCard(transaction, s),
         );
+
+        // Si hay match por tarjeta, usar ese; si no, NO usar los de auth
+        // (serían colisiones), seguimos a prioridad por monto+fecha.
+        if (sameCardMatches.length > 0) {
+          // Preferir el que además cuadra en monto
+          const exact = sameCardMatches.find(
+            (s) => Math.abs(transaction.amount - s.amount) <= this.AMOUNT_TOLERANCE,
+          );
+          if (exact) {
+            return this.createReconciliation(
+              transaction,
+              exact,
+              ReconciliationPriority.AUTHORIZATION_NUMBER,
+            );
+          }
+          // Misma tarjeta pero monto distinto → DIFERENCIA real
+          const s = sameCardMatches[0];
+          return this.createReconciliation(
+            transaction,
+            s,
+            ReconciliationPriority.AUTHORIZATION_NUMBER,
+            ReconciliationStatus.AMOUNT_MISMATCH,
+            Math.abs(transaction.amount - s.amount),
+          );
+        }
       }
     }
 
@@ -96,41 +310,18 @@ export class ReconciliationService {
         clientId,
       );
 
-      if (settlement) {
+      if (settlement && this.sameCard(transaction, settlement)) {
+        const diff = Math.abs(transaction.amount - settlement.amount);
         return this.createReconciliation(
           transaction,
           settlement,
           ReconciliationPriority.TRANSACTION_ID,
+          diff > this.AMOUNT_TOLERANCE
+            ? ReconciliationStatus.AMOUNT_MISMATCH
+            : ReconciliationStatus.MATCHED,
+          diff > this.AMOUNT_TOLERANCE ? diff : undefined,
         );
       }
-    }
-
-    // Priority 3: Match by amount + date
-    const settlement = await this.settlementsService.findByAmountAndDate(
-      transaction.amount,
-      transaction.transactionDate,
-      clientId,
-      this.AMOUNT_TOLERANCE,
-    );
-
-    if (settlement) {
-      // Check for amount mismatch
-      const amountDiff = Math.abs(transaction.amount - settlement.amount);
-      if (amountDiff > this.AMOUNT_TOLERANCE) {
-        return this.createReconciliation(
-          transaction,
-          settlement,
-          ReconciliationPriority.AMOUNT_DATE,
-          ReconciliationStatus.AMOUNT_MISMATCH,
-          amountDiff,
-        );
-      }
-
-      return this.createReconciliation(
-        transaction,
-        settlement,
-        ReconciliationPriority.AMOUNT_DATE,
-      );
     }
 
     // No match found

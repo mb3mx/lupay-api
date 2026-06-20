@@ -26,6 +26,13 @@ export class TransformInterceptor<T>
     context: ExecutionContext,
     next: CallHandler<T>,
   ): Observable<Response<T>> {
+    // No envolver streams SSE (@Sse marca el handler con metadata '__sse__'):
+    // cada MessageEvent debe llegar intacto al serializador de eventos.
+    const isSse = Reflect.getMetadata('__sse__', context.getHandler());
+    if (isSse) {
+      return next.handle() as unknown as Observable<Response<T>>;
+    }
+
     return next.handle().pipe(
       map((data) => {
         // If data already has a specific structure, return as is

@@ -22,12 +22,20 @@ export class ClientsService {
     orderBy?: Prisma.ClientOrderByWithRelationInput;
   }): Promise<Client[]> {
     const { skip, take, where, orderBy } = params;
+    // Si el caller no especifica isActive, se preserva el comportamiento legacy
+    // (solo activos). Si lo especifica (true/false), se respeta.
+    const finalWhere: Prisma.ClientWhereInput = { ...where };
+    if (finalWhere.isActive === undefined) {
+      finalWhere.isActive = true;
+    }
     return this.prisma.client.findMany({
       skip,
       take,
-      where: { ...where, isActive: true },
+      where: finalWhere,
       orderBy: orderBy || { name: 'asc' },
       include: {
+        sindicato: { select: { id: true, nombre: true } },
+        liquidadora: { select: { id: true, nombre: true } },
         terminals: {
           where: { isActive: true },
           select: { id: true, serialNumber: true, model: true },
@@ -36,9 +44,18 @@ export class ClientsService {
     });
   }
 
+  async count(where?: Prisma.ClientWhereInput): Promise<number> {
+    const finalWhere: Prisma.ClientWhereInput = { ...where };
+    if (finalWhere.isActive === undefined) {
+      finalWhere.isActive = true;
+    }
+    return this.prisma.client.count({ where: finalWhere });
+  }
+
   async findById(id: any): Promise<Client | null> {
+    const clientId = typeof id === 'bigint' ? id : BigInt(id);
     return this.prisma.client.findUnique({
-      where: { id, isActive: true },
+      where: { id: clientId, isActive: true },
       include: {
         terminals: {
           where: { isActive: true },
@@ -53,9 +70,20 @@ export class ClientsService {
     });
   }
 
+  async findByAfiliacion(afiliacion: string): Promise<Client | null> {
+    if (!afiliacion) return null;
+    return this.prisma.client.findFirst({
+      where: { afiliacion: afiliacion.trim(), isActive: true },
+    });
+  }
+
   async create(data: CreateClientDto): Promise<Client> {
     try {
-      return await this.prisma.client.create({ data });
+      const payload = {
+        ...data,
+        taxId: (data.taxId && data.taxId.trim()) ? data.taxId.trim() : null,
+      };
+      return await this.prisma.client.create({ data: payload });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
@@ -70,10 +98,15 @@ export class ClientsService {
   }
 
   async update(id: any, data: UpdateClientDto): Promise<Client> {
+    const clientId = typeof id === 'bigint' ? id : BigInt(id);
     try {
+      const payload = {
+        ...data,
+        taxId: data.taxId !== undefined ? ((data.taxId && data.taxId.trim()) ? data.taxId.trim() : null) : undefined,
+      };
       return await this.prisma.client.update({
-        where: { id },
-        data,
+        where: { id: clientId },
+        data: payload,
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -93,11 +126,19 @@ export class ClientsService {
 
   async delete(id: any): Promise<Client> {
     try {
-      // Soft delete
-      return await this.prisma.client.update({
-        where: { id },
-        data: { isActive: false },
-      });
+      const clientId = typeof id === 'bigint' ? id : BigInt(id);
+      const [, client] = await this.prisma.$transaction([
+        this.prisma.user.updateMany({
+          where: { clientId, role: 'CLIENT' },
+          data: { isActive: false },
+        }),
+        this.prisma.client.update({
+          where: { id: clientId },
+          data: { isActive: false },
+        }),
+      ]);
+      this.logger.log(`Client ${clientId} deactivated (cascade to CLIENT users)`);
+      return client;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2025') {

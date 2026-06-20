@@ -10,6 +10,7 @@ import {
   CardBrand,
 } from '@prisma/client';
 import { ParsedRow } from '../files/parsers/csv-parser';
+import { PosreRow } from '../files/parsers/posre-parser';
 
 @Injectable()
 export class SettlementsService {
@@ -100,6 +101,7 @@ export class SettlementsService {
     if (normalized.includes('VISA')) return CardBrand.VISA;
     if (normalized.includes('MASTER') || normalized.includes('MC')) return CardBrand.MASTERCARD;
     if (normalized.includes('AMEX') || normalized.includes('AMERICAN')) return CardBrand.AMEX;
+    if (normalized.includes('CARNET')) return CardBrand.CARNET;
     return CardBrand.OTHER;
   }
 
@@ -136,6 +138,63 @@ export class SettlementsService {
     }
 
     return new Date();
+  }
+
+  async createFromPosreRow(
+    row: PosreRow,
+    fileId: any,
+    clientId: any,
+  ): Promise<
+    | { kind: 'created'; record: Settlement }
+    | { kind: 'duplicate' }
+  > {
+    // Se descarta cuando ya existe un settlement con la misma identidad logica
+    // (auth + cuenta + fecha + afiliacion) Y el mismo monto. El monto se incluye
+    // en la consulta (no se compara despues sobre un findFirst arbitrario) para que:
+    //   - un reverso/ajuste con monto distinto se inserte como settlement adicional
+    //     la primera vez, y
+    //   - al recargar el mismo archivo, ese reverso ya se encuentre por identidad+monto
+    //     y se marque duplicado (antes findFirst regresaba el pago original con otro
+    //     monto y el reverso se reinsertaba en cada carga).
+    if (row.authorizationNumber) {
+      const existing = await this.prisma.settlement.findFirst({
+        where: {
+          authorizationNumber: row.authorizationNumber,
+          reference: row.cardNumber || undefined,
+          settlementDate: row.settlementDate,
+          afiliacion: row.afiliacion || undefined,
+          amount: { gte: row.amount - 0.01, lte: row.amount + 0.01 },
+        },
+        select: { id: true },
+      });
+
+      if (existing) {
+        return { kind: 'duplicate' };
+      }
+    }
+
+    try {
+      const record = await this.prisma.settlement.create({
+        data: {
+          authorizationNumber: row.authorizationNumber || undefined,
+          amount: row.amount,
+          settledAmount: row.montoPagar ?? undefined,
+          montoPagar: row.montoPagar ?? undefined,
+          cardBrand: row.cardBrand,
+          status: row.isCancelled ? 'CANCELLED' : 'ACTIVE',
+          afiliacion: row.afiliacion || undefined,
+          settlementDate: row.settlementDate,
+          transactionDate: row.transactionDate,
+          reference: row.cardNumber || undefined,
+          clientId,
+          fileId,
+        },
+      });
+      return { kind: 'created', record };
+    } catch (e) {
+      if (e?.code === 'P2002') return { kind: 'duplicate' };
+      throw e;
+    }
   }
 
   async findAll(params: {

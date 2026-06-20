@@ -6,6 +6,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { ClientsModule } from '../clients/clients.module';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { SettlementsModule } from '../settlements/settlements.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { SettlementsModule } from '../settlements/settlements.module';
     ClientsModule,
     TransactionsModule,
     SettlementsModule,
+    NotificationsModule,
   ],
   providers: [FilesService],
   controllers: [FilesController],

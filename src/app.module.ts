@@ -10,6 +10,15 @@ import { SettlementsModule } from './settlements/settlements.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { PayoutsModule } from './payouts/payouts.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { LiquidacionModule } from './liquidacion/liquidacion.module';
+import { DevolucionesModule } from './devoluciones/devoluciones.module';
+import { ContracargosModule } from './contracargos/contracargos.module';
+import { CancelacionesModule } from './cancelaciones/cancelaciones.module';
+import { CommonModule } from './common/common.module';
+import { SindicatosModule } from './sindicatos/sindicatos.module';
+import { LiquidadorasModule } from './liquidadoras/liquidadoras.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -18,6 +27,7 @@ import { PrismaModule } from './prisma/prisma.module';
       envFilePath: ['.env', '.env.local'],
     }),
     PrismaModule,
+    CommonModule,
     AuthModule,
     UsersModule,
     ClientsModule,
@@ -27,6 +37,14 @@ import { PrismaModule } from './prisma/prisma.module';
     SettlementsModule,
     ReconciliationModule,
     PayoutsModule,
+    DashboardModule,
+    LiquidacionModule,
+    DevolucionesModule,
+    ContracargosModule,
+    CancelacionesModule,
+    SindicatosModule,
+    LiquidadorasModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}
