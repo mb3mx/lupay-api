@@ -47,6 +47,7 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           envs: GH_ACTOR,GH_TOKEN
           script: |
+            set -e
             cd /opt/syncpay
             docker login ghcr.io -u "$GH_ACTOR" -p "$GH_TOKEN"
             docker compose pull api
