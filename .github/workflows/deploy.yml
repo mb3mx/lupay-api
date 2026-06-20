@@ -1,4 +1,4 @@
-name: Build, push y deploy (lupay-api)
+name: Build, push y deploy (syncpay-api)
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/lupay-api
+  IMAGE: ghcr.io/${{ github.repository_owner }}/syncpay-api
 
 jobs:
   build-and-push:
@@ -47,7 +47,7 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           envs: GH_ACTOR,GH_TOKEN
           script: |
-            cd /opt/lupay
+            cd /opt/syncpay
             docker login ghcr.io -u "$GH_ACTOR" -p "$GH_TOKEN"
             docker compose pull api
             docker compose run --rm api npx prisma migrate deploy
