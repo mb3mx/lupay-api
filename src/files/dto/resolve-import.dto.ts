@@ -22,6 +22,20 @@ export class ClientCreateIssue {
   email: string;
 
   @ApiProperty()
+  @IsNotEmpty()
+  activationEmail: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  terminal?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  reintegroTime?: string;
+
+  @ApiProperty()
   code: string;
 
   @ApiProperty({ required: false })

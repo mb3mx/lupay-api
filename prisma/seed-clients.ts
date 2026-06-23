@@ -4,6 +4,30 @@ import * as path from 'path';
 
 const prisma = new PrismaClient();
 
+function getCellString(cell: ExcelJS.Cell): string {
+  const val = cell.value;
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'object') {
+    if ('result' in val) {
+      return val.result?.toString().trim() || '';
+    }
+    if ('text' in val) {
+      return val.text?.toString().trim() || '';
+    }
+    return JSON.stringify(val);
+  }
+  return val.toString().trim();
+}
+
+function getCellNumber(cell: ExcelJS.Cell): number {
+  const val = cell.value;
+  if (typeof val === 'number') return val;
+  if (val && typeof val === 'object' && 'result' in val) {
+    return Number(val.result) || 0;
+  }
+  return Number(val) || 0;
+}
+
 const LIQUIDADORAS = [
   {
     nombre: 'RADAQUI',
@@ -26,46 +50,12 @@ const LIQUIDADORAS = [
 ];
 
 const SINDICATOS = [
-  { nombre: 'SICOMEP', banco: 'KUSPIT', clabe: '653180003810168231' },
+  { nombre: 'SINDICATO 1 DE MAYO', banco: 'KUSPIT', clabe: '653180003810168231' },
   { nombre: 'UNIDAD SOLIDARIA', banco: 'PEIBO', clabe: '732010100000006987' },
-  {
-    nombre: 'MOLINEROS, HARINEROS Y PANIFICADORES',
-    banco: 'PEIBO',
-    clabe: '732010100000005056',
+  { nombre: 'MOLINEROS, HARINEROS Y PANIFICADORES',banco: 'PEIBO',clabe: '732010100000005056',
   },
 ];
 
-// 4 clientes principales por afiliación
-const CLIENTES_AFILIACION = [
-  {
-    afiliacion: '9829972',
-    code: 'EFEVOO-9829972',
-    name: 'EfevooPay Principal',
-    businessName: 'EFEVOOPAY S.A. DE C.V.',
-    taxId: 'EFV001',
-  },
-  {
-    afiliacion: '9877099',
-    code: 'EFEVOO-9877099',
-    name: 'EfevooPay Secundario',
-    businessName: 'EFEVOOPAY S.A. DE C.V.',
-    taxId: 'EFV002',
-  },
-  {
-    afiliacion: '9829975',
-    code: 'EFEVOO-9829975',
-    name: 'EfevooPay Turismo',
-    businessName: 'EFEVOOPAY S.A. DE C.V.',
-    taxId: 'EFV003',
-  },
-  {
-    afiliacion: '7163170335',
-    code: 'EFEVOO-AMEX',
-    name: 'EfevooPay AMEX',
-    businessName: 'EFEVOOPAY S.A. DE C.V.',
-    taxId: 'EFV004',
-  },
-];
 
 async function seedSindicatos() {
   console.log('Creando sindicatos...');
@@ -97,24 +87,7 @@ async function seedLiquidadoras() {
   return created;
 }
 
-async function seedClientesAfiliacion() {
-  console.log('Creando clientes por afiliación...');
-  for (const c of CLIENTES_AFILIACION) {
-    await prisma.client.upsert({
-      where: { code: c.code },
-      update: { afiliacion: c.afiliacion },
-      create: {
-        code: c.code,
-        name: c.name,
-        businessName: c.businessName,
-        taxId: c.taxId,
-        afiliacion: c.afiliacion,
-        commissionTotal: 0,
-      },
-    });
-    console.log(`  ✓ ${c.name} (afiliacion: ${c.afiliacion})`);
-  }
-}
+
 
 async function seedNegocios(
   sindicatoIds: Record<string, bigint>,
@@ -123,16 +96,16 @@ async function seedNegocios(
   // Buscar archivo BASE LIQUIDADORAS
   const basePath = path.resolve(
     __dirname,
-    '../../documentos/11_BASE LIQUIDADORAS 12.02.26.xlsx',
+    '../../docs/17_BASE LIQUIDADORAS 18.06.26.xlsx',
   );
 
   let workbook: ExcelJS.Workbook;
   try {
     workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(basePath);
-  } catch {
+    } catch {
     console.warn(
-      `  ⚠️  No se encontró el archivo BASE LIQUIDADORAS en ${basePath}`,
+      `  ⚠️  No se encontró el archivo BASE LIQUIDADORAS en ninguna de las rutas provistas.`,
     );
     console.warn('     Saltando seed de negocios. Puedes ejecutarlo manualmente después.');
     return;
@@ -146,40 +119,73 @@ async function seedNegocios(
 
   console.log('Importando negocios de CLIENTES(PR+LITE)...');
 
+  const emailsInUse = new Set<string>();
+
   let count = 0;
   let skipped = 0;
 
   for (let rowNum = 2; rowNum <= ws.rowCount; rowNum++) {
     const row = ws.getRow(rowNum);
 
-    const nombre = row.getCell(2).value?.toString().trim();      // B - NOMBRE TERMINAL
-    const comisionRaw = row.getCell(5).value;                    // E - COMISIÓN NEGOCIO
-    const bankClabe = row.getCell(10).value?.toString().trim();  // J - SUBCUENTA KUSPIT
-    const idSistema = row.getCell(16).value;                     // P - ID SISTEMA
-    const razonSocial = row.getCell(17).value?.toString().trim(); // Q - RAZON SOCIAL
-    const sindicatoNombre = row.getCell(14).value?.toString().trim(); // N - SINDICATO
+    const nombre = getCellString(row.getCell(2)).toUpperCase();                 // B - NOMBRE TERMINAL
+    const comision = getCellNumber(row.getCell(5));               // E - COMISIÓN NEGOCIO
+    const inntecCard = getCellString(row.getCell(8));             // H - NO. TARJETA INNTEC
+    const inntecHolder = getCellString(row.getCell(9));           // I - TITULAR DE TARJETA
+    const bankClabe = getCellString(row.getCell(10));             // J - SUBCUENTA KUSPIT
+    const idSistema = getCellString(row.getCell(16));             // P - ID SISTEMA
+    const razonSocial = getCellString(row.getCell(17));           // Q - RAZON SOCIAL
+    const sindicatoNombre = getCellString(row.getCell(14));       // N - SINDICATO
+
+    // Nuevos campos
+    const terminalVal = getCellString(row.getCell(4));
+    const terminal = terminalVal ? terminalVal : null;            // D - NO. SERIE TPV LU-PAY
+    const reintegroTimeVal = getCellString(row.getCell(11));
+    const reintegroTime = reintegroTimeVal ? reintegroTimeVal : null; // K - TIEMPO DE REINTEGRO/DISPERSION
+
+    let activationEmail = getCellString(row.getCell(3));          // C - CORREO ACTIVACION CLIP
+  
 
     if (!nombre || !idSistema) {
       skipped++;
       continue;
     }
 
-    const comision = typeof comisionRaw === 'number' ? comisionRaw : 0;
-    const code = `NEG-${idSistema}`;
-    const taxId = `NEG${idSistema}`;
+    const code = getCellString(row.getCell(21)); // U - ID CLIENTE
+
+    // Resolve email uniqueness within the file using prefix 1, 2, etc.
+    const cleanEmail = activationEmail.trim().toLowerCase();
+
+    let finalActivationEmail = cleanEmail;
+    let counter = 1;
+    // Check if the email was already processed in this file loop, if so, add a prefix (e.g. 1_email, 2_email)
+    while (emailsInUse.has(finalActivationEmail)) {
+      const parts = cleanEmail.split('@');
+      if (parts.length === 2) {
+        finalActivationEmail = `${counter}_${parts[0]}@${parts[1]}`;
+      } else {
+        finalActivationEmail = `${counter}_${cleanEmail}`;
+      }
+      counter++;
+    }
+
+    // Mark the resolved email as in use
+    emailsInUse.add(finalActivationEmail);
+    const taxId = ``;
 
     const sindicatoId = sindicatoNombre ? sindicatoIds[sindicatoNombre] ?? null : null;
     const liquidadoraId = razonSocial ? liquidadoraIds[razonSocial] ?? null : null;
 
     try {
-      await prisma.client.upsert({
+      const client = await prisma.client.upsert({
         where: { code },
         update: {
           name: nombre,
           commissionTotal: comision,
-          bankClabe: bankClabe || null,
           sindicatoId: sindicatoId ?? undefined,
           liquidadoraId: liquidadoraId ?? undefined,
+          activationEmail: finalActivationEmail,
+          terminal,
+          reintegroTime,
         },
         create: {
           code,
@@ -187,13 +193,96 @@ async function seedNegocios(
           businessName: razonSocial || nombre,
           taxId,
           commissionTotal: comision,
-          bankClabe: bankClabe || null,
           sindicatoId: sindicatoId ?? undefined,
           liquidadoraId: liquidadoraId ?? undefined,
+          activationEmail: finalActivationEmail,
+          terminal,
+          reintegroTime,
         },
       });
+
+      // Clear existing payment accounts for this client during seed
+      await prisma.clientPaymentAccount.deleteMany({
+        where: { clientId: client.id },
+      });
+
+      const accountsToCreate: any[] = [];
+
+      // 1. Parse Inntec cards (can have multiple cards separated by newlines with percentages)
+      let totalInntecPct = 0;
+      if (inntecCard) {
+        const cardLines = inntecCard.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const holderLines = (inntecHolder || '').split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+        cardLines.forEach((line, idx) => {
+          const match = line.match(/^(\d+)\s*(?:\((\d+)%\))?/);
+          let cardNum = line;
+          let pct = 100.0;
+          if (match) {
+            cardNum = match[1];
+            if (match[2]) {
+              pct = parseFloat(match[2]);
+            }
+          }
+
+          let holder = '';
+          if (idx < holderLines.length) {
+            holder = holderLines[idx];
+          } else if (holderLines.length > 0) {
+            holder = holderLines[0]; // Repeat holder name if only one is provided
+          }
+
+          accountsToCreate.push({
+            type: 'INNTEC',
+            accountNumber: cardNum,
+            holderName: holder,
+            bankName: 'INNTEC',
+            payoutPercentage: pct,
+            isActive: true,
+          });
+          totalInntecPct += pct;
+        });
+      }
+
+      // 2. Parse Kuspit subaccount
+      if (bankClabe) {
+        const bankClabeClean = bankClabe.replace(/\n|\r/g, '').trim();
+        const isIgnoredKuspit = ['RESGUARDO', 'SIN CUENTA', 'NA', 'N/A', 'N / A', '-'].includes(bankClabeClean.toUpperCase());
+        if (bankClabeClean && !isIgnoredKuspit) {
+          // Payout percentage is the remaining percentage (100 - sum(inntec_percentages))
+          const remainingPct = Math.max(0.0, 100.0 - totalInntecPct);
+          accountsToCreate.push({
+            type: 'KUSPIT',
+            accountNumber: bankClabeClean,
+            holderName: '', // Holder name is empty for Kuspit as requested
+            bankName: 'KUSPIT',
+            payoutPercentage: remainingPct,
+            isActive: true,
+          });
+        }
+      }
+
+      if (accountsToCreate.length > 0) {
+        // Enforce sum of active percentages is exactly 100% if there is only 1 account
+        if (accountsToCreate.length === 1) {
+          accountsToCreate[0].payoutPercentage = 100.0;
+        }
+
+        await prisma.clientPaymentAccount.createMany({
+          data: accountsToCreate.map(acc => ({
+            clientId: client.id,
+            type: acc.type as any,
+            accountNumber: acc.accountNumber,
+            holderName: acc.holderName,
+            bankName: acc.bankName,
+            payoutPercentage: acc.payoutPercentage,
+            isActive: acc.isActive,
+          })),
+        });
+      }
+
       count++;
-    } catch {
+    } catch (e) {
       skipped++;
     }
   }
@@ -206,7 +295,7 @@ async function main() {
 
   const sindicatoIds = await seedSindicatos();
   const liquidadoraIds = await seedLiquidadoras();
-  await seedClientesAfiliacion();
+  //await seedClientesAfiliacion();
   await seedNegocios(sindicatoIds, liquidadoraIds);
 
   const totals = await Promise.all([

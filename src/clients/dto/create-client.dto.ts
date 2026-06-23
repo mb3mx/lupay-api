@@ -7,9 +7,12 @@ import {
   Min,
   Max,
   Length,
+  IsArray,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CreatePaymentAccountDto } from './payment-account.dto';
 
 export class CreateClientDto {
   @ApiProperty({ example: 'CLI001', description: 'Client unique code' })
@@ -48,26 +51,25 @@ export class CreateClientDto {
   @IsOptional()
   contactEmail?: string;
 
+  @ApiProperty({ example: 'activation@lupay.com', description: 'Activation email (unique)' })
+  @IsEmail()
+  @IsNotEmpty()
+  activationEmail: string;
+
+  @ApiPropertyOptional({ example: '01610017202503130153', description: 'Terminal serial number' })
+  @IsString()
+  @IsOptional()
+  terminal?: string;
+
+  @ApiPropertyOptional({ example: '24 HORAS', description: 'Reintegro turnaround time' })
+  @IsString()
+  @IsOptional()
+  reintegroTime?: string;
+
   @ApiPropertyOptional({ example: '+52 555 123 4567' })
   @IsString()
   @IsOptional()
   contactPhone?: string;
-
-  @ApiPropertyOptional({ example: 'BBVA' })
-  @IsString()
-  @IsOptional()
-  bankName?: string;
-
-  @ApiPropertyOptional({ example: '0123456789' })
-  @IsString()
-  @IsOptional()
-  bankAccount?: string;
-
-  @ApiPropertyOptional({ example: '012345678901234567', description: 'CLABE bancaria (18 digitos)' })
-  @IsString()
-  @IsOptional()
-  @Length(18, 18, { message: 'La CLABE debe tener exactamente 18 dígitos numéricos.' })
-  bankClabe?: string;
 
   @ApiPropertyOptional({ example: 'AFL00123' })
   @IsString()
@@ -85,4 +87,11 @@ export class CreateClientDto {
   @IsOptional()
   @Type(() => Number)
   liquidadoraId?: number;
+
+  @ApiPropertyOptional({ type: [CreatePaymentAccountDto], description: 'Cuentas de pago asociadas (opcional)' })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreatePaymentAccountDto)
+  paymentAccounts?: CreatePaymentAccountDto[];
 }
