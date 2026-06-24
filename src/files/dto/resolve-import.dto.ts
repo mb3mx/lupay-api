@@ -7,11 +7,16 @@ export class ClientUpdateIssue {
   @ApiProperty()
   clientId: string;
 
-  @ApiProperty({ enum: ['name', 'contactEmail'] })
-  field: 'name' | 'contactEmail';
+  @ApiProperty({ enum: ['name', 'activationEmail'] })
+  field: 'name' | 'activationEmail';
 
   @ApiProperty()
   value: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  terminal?: string;
 }
 
 export class ClientCreateIssue {

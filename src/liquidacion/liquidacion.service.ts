@@ -305,7 +305,7 @@ export class LiquidacionService {
     const wsLiqSind = wb.addWorksheet('LIQ  SIND');
     wsLiqSind.addRow([
       'Cliente', 'Razón Social', 'CLABE Empresa', 'Monto Bruto', '% Cliente', 'Com. Cliente', 'Pago Cliente',
-      'Sindicato', 'CLABE Sindicato', 'Reintegro','Cuenta', '%', 'Titular', 'Banco', 'Pago'
+      'Sindicato', 'CLABE Sindicato', 'Reintegro','Cuenta', '%', 'Titular', 'Banco', 'Pago', 'Terminal'
     ]);
     wsLiqSind.getRow(1).font = { bold: true };
 
@@ -331,6 +331,7 @@ export class LiquidacionService {
           '',
           '',
           item.pagoNeto,
+          item.client.terminal
         ]);
       } else {
         // Casos B y C: Al menos una cuenta de pago -> La primera cuenta de pago complementa la fila principal
@@ -353,6 +354,7 @@ export class LiquidacionService {
           firstAcc.holderName,
           firstAcc.bankName || firstAcc.type,
           item.pagoNeto * firstFactor,
+          item.client.terminal
         ]);
 
         // Cuentas adicionales (a partir de la segunda) se agregan inmediatamente después
@@ -375,6 +377,7 @@ export class LiquidacionService {
             acc.holderName,
             acc.bankName || acc.type,
             item.pagoNeto * factor,
+            item.client.terminal
           ]);
         }
       }

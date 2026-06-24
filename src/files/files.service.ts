@@ -783,7 +783,7 @@ export class FilesService {
       where: {
         OR: [
           { name: { in: nombresArchivo } },
-          { contactEmail: { in: correosArchivo } }
+          { activationEmail: { in: correosArchivo } }
         ]
       }
     });
@@ -795,7 +795,7 @@ export class FilesService {
     for (const item of listadoComercios) {
       // 1. Buscar por el email del archivo en la base de datos
       const emailMatch = clientesDB.find(
-        c => c.contactEmail?.toLowerCase().trim() === item.email
+        c => c.activationEmail?.toLowerCase().trim() === item.email
       );
 
       if (emailMatch) {
@@ -803,7 +803,7 @@ export class FilesService {
         if (emailMatch.name.toLowerCase().trim() !== item.nombre.toLowerCase().trim()) {
           updateNames.push({
             clientId: emailMatch.id.toString(),
-            email: emailMatch.contactEmail,
+            email: emailMatch.activationEmail,
             currentName: emailMatch.name,
             newName: item.nombre
           });
@@ -818,12 +818,13 @@ export class FilesService {
 
       if (nameMatch) {
         // Si existe y el email es diferente, actualizar email
-        if (nameMatch.contactEmail?.toLowerCase().trim() !== item.email) {
+        if (nameMatch.activationEmail?.toLowerCase().trim() !== item.email) {
           updateEmails.push({
             clientId: nameMatch.id.toString(),
             name: nameMatch.name,
-            currentEmail: nameMatch.contactEmail || '',
-            newEmail: item.email
+            currentEmail: nameMatch.activationEmail || '',
+            newEmail: item.email,
+            terminal: item.terminal || ''
           });
         }
         continue; // Cliente ya ubicado por nombre comercial
@@ -863,8 +864,9 @@ export class FilesService {
         for (const update of resolvedIssues.updates) {
           const uId = BigInt(update.clientId);
           const dataToUpdate: any = {};
-          if (update.field === 'contactEmail') {
-            dataToUpdate.contactEmail = update.value.trim();
+          if (update.field === 'activationEmail') {
+            dataToUpdate.activationEmail = update.value.trim();
+            dataToUpdate.terminal = update.terminal && update.terminal.trim() ? update.terminal.trim() : null;
           } else if (update.field === 'name') {
             dataToUpdate.name = update.value.trim();
           }
