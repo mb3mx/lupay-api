@@ -20,6 +20,7 @@ import { SindicatosModule } from './sindicatos/sindicatos.module';
 import { LiquidadorasModule } from './liquidadoras/liquidadoras.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { MenusModule } from './menus/menus.module';
+import { PermissionsModule } from './permissions/permissions.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { MenusModule } from './menus/menus.module';
     LiquidadorasModule,
     NotificationsModule,
     MenusModule,
+    PermissionsModule,
   ],
 })
 export class AppModule {}
