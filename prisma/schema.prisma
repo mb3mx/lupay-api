@@ -118,10 +118,11 @@ model User {
 }
 
 model Sindicato {
-  id     BigInt  @id @default(autoincrement())
-  nombre String  @unique
-  banco  String
-  clabe  String  @unique
+  id       BigInt  @id @default(autoincrement())
+  nombre   String  @unique
+  banco    String
+  clabe    String  @unique
+  isActive Boolean @default(true) @map("active")
 
   clients Client[]
 
@@ -134,6 +135,7 @@ model Liquidadora {
   razonSocial String  @map("razon_social")
   banco       String
   clabe       String  @unique
+  isActive    Boolean @default(true) @map("active")
 
   clients Client[]
   liquidacionItems LiquidacionItem[]
