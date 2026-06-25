@@ -28,6 +28,34 @@ function getCellNumber(cell: ExcelJS.Cell): number {
   return Number(val) || 0;
 }
 
+function excelSerialToDate(serial: number): Date {
+  // El epoch de Excel empieza en 1899-12-30
+  const utcDays = Math.floor(serial - 25569);
+  return new Date(utcDays * 86400 * 1000);
+}
+
+function getCellDate(cell: ExcelJS.Cell): Date | null {
+  const val = cell.value;
+  if (val === null || val === undefined || val === '') return null;
+  if (val instanceof Date) return val;
+  if (typeof val === 'object' && 'result' in val) {
+    const r = (val as any).result;
+    if (r instanceof Date) return r;
+    if (typeof r === 'number') return excelSerialToDate(r);
+    if (typeof r === 'string') {
+      const parsed = new Date(r);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+    return null;
+  }
+  if (typeof val === 'number') return excelSerialToDate(val);
+  if (typeof val === 'string') {
+    const parsed = new Date(val);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 const LIQUIDADORAS = [
   {
     nombre: 'RADAQUI',
@@ -52,7 +80,8 @@ const LIQUIDADORAS = [
 const SINDICATOS = [
   { nombre: 'SINDICATO 1 DE MAYO', banco: 'KUSPIT', clabe: '653180003810168231' },
   { nombre: 'UNIDAD SOLIDARIA', banco: 'PEIBO', clabe: '732010100000006987' },
-  { nombre: 'MOLINEROS, HARINEROS Y PANIFICADORES',banco: 'PEIBO',clabe: '732010100000005056',
+  {
+    nombre: 'MOLINEROS, HARINEROS Y PANIFICADORES', banco: 'PEIBO', clabe: '732010100000005056',
   },
 ];
 
@@ -96,14 +125,14 @@ async function seedNegocios(
   // Buscar archivo BASE LIQUIDADORAS
   const basePath = path.resolve(
     __dirname,
-    '../../docs/17_BASE LIQUIDADORAS 18.06.26.xlsx',
+    '../../documentos/17_BASE LIQUIDADORAS 18.06.26.xlsx',
   );
 
   let workbook: ExcelJS.Workbook;
   try {
     workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(basePath);
-    } catch {
+  } catch {
     console.warn(
       `  ⚠️  No se encontró el archivo BASE LIQUIDADORAS en ninguna de las rutas provistas.`,
     );
@@ -141,9 +170,12 @@ async function seedNegocios(
     const terminal = terminalVal ? terminalVal : null;            // D - NO. SERIE TPV LU-PAY
     const reintegroTimeVal = getCellString(row.getCell(11));
     const reintegroTime = reintegroTimeVal ? reintegroTimeVal : null; // K - TIEMPO DE REINTEGRO/DISPERSION
+    const joinedAt = getCellDate(row.getCell(1));                  // A - FECHA ING LUPAY
+    const commentsVal = getCellString(row.getCell(23));
+    const comments = commentsVal ? commentsVal : null;             // W - COMENTARIOS
 
     let activationEmail = getCellString(row.getCell(3));          // C - CORREO ACTIVACION CLIP
-  
+
 
     if (!nombre || !idSistema) {
       skipped++;
@@ -186,6 +218,8 @@ async function seedNegocios(
           activationEmail: finalActivationEmail,
           terminal,
           reintegroTime,
+          joinedAt,
+          comments,
         },
         create: {
           code,
@@ -198,6 +232,8 @@ async function seedNegocios(
           activationEmail: finalActivationEmail,
           terminal,
           reintegroTime,
+          joinedAt,
+          comments,
         },
       });
 
