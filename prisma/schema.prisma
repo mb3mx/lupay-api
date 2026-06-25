@@ -87,6 +87,12 @@ enum PaymentAccountType {
   BANK
 }
 
+enum MenuItemType {
+  GROUP
+  COLLAPSE
+  ITEM
+}
+
 // ==================== MODELS ====================
 
 model User {
@@ -538,4 +544,27 @@ model Contracargo {
   @@index([transactionId])
   @@index([status])
   @@map("contracargo")
+}
+
+model MenuItem {
+  id       BigInt   @id @default(autoincrement())
+  parentId BigInt?  @map("parent_id")
+  parent   MenuItem? @relation("MenuItemChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children MenuItem[] @relation("MenuItemChildren")
+
+  title        String
+  translateKey String?      @map("translate_key")
+  type         MenuItemType @default(ITEM)
+  icon         String?
+  url          String?
+  exactMatch   Boolean      @default(false) @map("exact_match")
+  order        Int          @default(0)
+  isActive     Boolean      @default(true) @map("active")
+  roles        UserRole[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([parentId])
+  @@map("menu_item")
 }
