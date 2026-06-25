@@ -805,7 +805,8 @@ export class FilesService {
             clientId: emailMatch.id.toString(),
             email: emailMatch.activationEmail,
             currentName: emailMatch.name,
-            newName: item.nombre
+            newName: item.nombre,
+            terminal: item.terminal || ''
           });
         }
         continue; // Cliente ya ubicado por email
@@ -869,6 +870,7 @@ export class FilesService {
             dataToUpdate.terminal = update.terminal && update.terminal.trim() ? update.terminal.trim() : null;
           } else if (update.field === 'name') {
             dataToUpdate.name = update.value.trim();
+            dataToUpdate.terminal = update.terminal && update.terminal.trim() ? update.terminal.trim() : null;
           }
           await tx.client.update({
             where: { id: uId },
