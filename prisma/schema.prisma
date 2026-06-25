@@ -152,6 +152,8 @@ model Client {
   activationEmail  String  @unique @map("activation_email")
   terminal         String? @map("terminal")
   reintegroTime    String? @map("reintegro_time")
+  joinedAt         DateTime? @map("joined_at")
+  comments         String?   @map("comments")
 
   // Contact
   contactName   String? @map("contact_name")

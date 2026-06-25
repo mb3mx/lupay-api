@@ -8,6 +8,7 @@ import {
   Max,
   Length,
   IsArray,
+  IsDateString,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -75,6 +76,16 @@ export class CreateClientDto {
   @IsString()
   @IsOptional()
   afiliacion?: string;
+
+  @ApiPropertyOptional({ example: '2026-01-15', description: 'Fecha de ingreso del cliente a la plataforma' })
+  @IsDateString()
+  @IsOptional()
+  joinedAt?: string;
+
+  @ApiPropertyOptional({ example: 'Cliente referido por...' })
+  @IsString()
+  @IsOptional()
+  comments?: string;
 
   @ApiPropertyOptional({ example: 1, description: 'ID del sindicato (opcional)' })
   @IsNumber()
