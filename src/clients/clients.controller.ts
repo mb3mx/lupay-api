@@ -21,14 +21,16 @@ import {
 import { ClientsService } from './clients.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
+import { PermissionsGuard } from '../auth/permissions.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '../common/enums';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { UserRole, PermissionAction } from '../common/enums';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
 @ApiTags('Clients')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Controller('clients')
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
@@ -93,16 +95,16 @@ export class ClientsController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Create a new client (ADMIN only)' })
+  @RequirePermission('clients', PermissionAction.CREATE)
+  @ApiOperation({ summary: 'Create a new client' })
   async create(@Body() createClientDto: CreateClientDto) {
     const client = await this.clientsService.create(createClientDto);
     return { data: client };
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Update client (ADMIN only)' })
+  @RequirePermission('clients', PermissionAction.UPDATE)
+  @ApiOperation({ summary: 'Update client' })
   @ApiParam({ name: 'id', description: 'Client ID' })
   async update(@Param('id') id: any, @Body() updateClientDto: UpdateClientDto) {
     const client = await this.clientsService.update(id, updateClientDto);

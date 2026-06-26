@@ -25,8 +25,10 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiConsumes } from '@ne
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
+import { PermissionsGuard } from '../auth/permissions.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '../common/enums';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { UserRole, PermissionAction } from '../common/enums';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -36,14 +38,14 @@ if (!existsSync(AVATARS_DIR)) mkdirSync(AVATARS_DIR, { recursive: true });
 
 @ApiTags('Users')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Listar usuarios con filtros (ADMIN)' })
+  @RequirePermission('users', PermissionAction.READ)
+  @ApiOperation({ summary: 'Listar usuarios con filtros' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
@@ -176,8 +178,8 @@ export class UsersController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Get user by ID (ADMIN)' })
+  @RequirePermission('users', PermissionAction.READ)
+  @ApiOperation({ summary: 'Get user by ID' })
   async findOne(@Param('id') id: string) {
     const user = await this.usersService.findByIdWithClient(BigInt(id));
     if (!user) {
@@ -307,8 +309,8 @@ export class UsersController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Crear usuario (ADMIN)' })
+  @RequirePermission('users', PermissionAction.CREATE)
+  @ApiOperation({ summary: 'Crear usuario' })
   async create(@Body() dto: CreateUserDto) {
     const user = await this.usersService.createByAdmin(dto);
     return {
@@ -325,8 +327,8 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Editar usuario (ADMIN)' })
+  @RequirePermission('users', PermissionAction.UPDATE)
+  @ApiOperation({ summary: 'Editar usuario' })
   async update(
     @Request() req: any,
     @Param('id') id: string,

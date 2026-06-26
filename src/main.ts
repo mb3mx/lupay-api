@@ -26,11 +26,16 @@ async function bootstrap() {
         enableImplicitConversion: true,
       },
       exceptionFactory: (errors) => {
-        const messages = errors.map(
-          (error) =>
-            `${error.property}: ${Object.values(error.constraints || {}).join(', ')}`,
-        );
-        return new BadRequestException(messages);
+        const flatten = (errs: typeof errors, path = ''): string[] => {
+          return errs.flatMap((error) => {
+            const propertyPath = path ? `${path}.${error.property}` : error.property;
+            if (error.children?.length) {
+              return flatten(error.children, propertyPath);
+            }
+            return [`${propertyPath}: ${Object.values(error.constraints || {}).join(', ')}`];
+          });
+        };
+        return new BadRequestException(flatten(errors));
       },
     }),
   );
