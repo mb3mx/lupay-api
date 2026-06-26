@@ -78,14 +78,18 @@ export class LiquidacionService {
       }
     }
 
-    // Buscar cada merchant en el catálogo de clientes
-    const merchantNames = Object.keys(porMerchant);
+    // Convertir nombres del Excel a mayúsculas antes de la consulta
+    const merchantNamesUpper = Object.keys(porMerchant).map(name => name.trim().toUpperCase());
+
+    // Buscar en la base de datos únicamente los clientes correspondientes a las transacciones
     const clientesCatalogo = await this.prisma.client.findMany({
-      where: { name: { in: merchantNames } },
+      where: { name: { in: merchantNamesUpper } },
       include: { liquidadora: true, sindicato: true },
     });
     const clientesByName: Record<string, any> = {};
-    for (const c of clientesCatalogo) clientesByName[c.name] = c;
+    for (const c of clientesCatalogo) {
+      clientesByName[c.name.trim().toUpperCase()] = c;
+    }
 
     // Construir items — solo negocios con liquidadora asignada
     const porCliente: Record<
@@ -93,7 +97,8 @@ export class LiquidacionService {
       { client: any; montoBruto: number; count: number; montoSettlement: number }
     > = {};
     for (const [key, data] of Object.entries(porMerchant)) {
-      const cliente = clientesByName[key];
+      const normalizedKey = key.trim().toUpperCase();
+      const cliente = clientesByName[normalizedKey];
       if (!cliente) continue;
       if (!cliente.liquidadoraId) {
         throw new ConflictException({

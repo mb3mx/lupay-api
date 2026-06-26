@@ -360,7 +360,7 @@ export class TransactionsService {
           operationType: row.operationType,
           tipoPago: row.tipoPago || undefined,
           afiliacion: row.afiliacion || undefined,
-          merchantName: row.merchantName || undefined,
+          merchantName: row.merchantName ? row.merchantName.trim().toUpperCase() : undefined,
           // Campos preservados del Excel completo
           adquiriente: row.adquiriente || undefined,
           fiid: row.fiid || undefined,
