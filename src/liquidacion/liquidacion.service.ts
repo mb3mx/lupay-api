@@ -305,7 +305,7 @@ export class LiquidacionService {
     const wsLiqSind = wb.addWorksheet('LIQ  SIND');
     wsLiqSind.addRow([
       'Cliente', 'Razón Social', 'CLABE Empresa', 'Monto Bruto', '% Cliente', 'Com. Cliente', 'Pago Cliente',
-      'Sindicato', 'CLABE Sindicato', 'Reintegro','Cuenta', '%', 'Titular', 'Banco', 'Pago', 'Terminal'
+      'Sindicato', 'CLABE Sindicato', 'Reintegro', 'Cuenta', 'Titular', 'Banco', 'Pago', 'Terminal'
     ]);
     wsLiqSind.getRow(1).font = { bold: true };
 
@@ -315,7 +315,7 @@ export class LiquidacionService {
 
       if (activeAccounts.length === 0) {
         // Caso A: Sin cuenta de pago -> Leyenda RESGUARDO y 100% del monto
-        wsLiqSind.addRow([
+        const row = wsLiqSind.addRow([
           item.client.name,
           item.liquidadora?.razonSocial ?? '',
           item.liquidadora?.clabe ?? '',
@@ -326,19 +326,34 @@ export class LiquidacionService {
           item.client.sindicato?.nombre ?? '',
           item.client.sindicato?.clabe ?? '',
           item.client.reintegroTime,
-          '',
-          '',
-          '',
-          '',
-          item.pagoNeto,
+          '', // Cuenta
+          '', // Titular
+          '', // Banco
+          item.pagoNeto, // Pago
           item.client.terminal
         ]);
+        row.alignment = { wrapText: true, vertical: 'middle' };
       } else {
-        // Casos B y C: Al menos una cuenta de pago -> La primera cuenta de pago complementa la fila principal
-        const firstAcc = activeAccounts[0];
-        const firstFactor = firstAcc.payoutPercentage / 100;
+        // Casos B y C: Al menos una cuenta de pago -> Un solo registro con valores concatenados por salto de línea
+        const cuentaVal = activeAccounts
+          .map(acc => `${acc.accountNumber || '-'} (${acc.payoutPercentage.toFixed(0)}%)`)
+          .join('\n');
 
-        wsLiqSind.addRow([
+        const titularVal = activeAccounts
+          .map(acc => acc.holderName)
+          .join('\n');
+
+        const bancoVal = activeAccounts
+          .map(acc => acc.bankName || acc.type)
+          .join('\n');
+
+        const pagoVal = activeAccounts.length === 1
+          ? item.pagoNeto * (activeAccounts[0].payoutPercentage / 100)
+          : activeAccounts
+              .map(acc => (item.pagoNeto * (acc.payoutPercentage / 100)).toFixed(2))
+              .join('\n');
+
+        const row = wsLiqSind.addRow([
           item.client.name,
           item.liquidadora?.razonSocial ?? '',
           item.liquidadora?.clabe ?? '',
@@ -349,37 +364,13 @@ export class LiquidacionService {
           item.client.sindicato?.nombre ?? '',
           item.client.sindicato?.clabe ?? '',
           item.client.reintegroTime,
-          `${firstAcc.accountNumber}`,
-          `${firstAcc.payoutPercentage.toFixed(2)}%`,
-          firstAcc.holderName,
-          firstAcc.bankName || firstAcc.type,
-          item.pagoNeto * firstFactor,
+          cuentaVal,
+          titularVal,
+          bancoVal,
+          pagoVal,
           item.client.terminal
         ]);
-
-        // Cuentas adicionales (a partir de la segunda) se agregan inmediatamente después
-        for (let i = 1; i < activeAccounts.length; i++) {
-          const acc = activeAccounts[i];
-          const factor = acc.payoutPercentage / 100;
-          wsLiqSind.addRow([
-            '', // Cliente
-            '', // Razón Social
-            '', // CLABE Empresa
-            '', // Monto Bruto
-            '', // % Cliente
-            '', // Com. Cliente
-            '', // Pago Cliente
-            '', // Sindicato
-            '', // CLABE Sindicato
-            '', // Reintegro Time
-            `${acc.accountNumber}`,
-            `${acc.payoutPercentage.toFixed(2)}%`,
-            acc.holderName,
-            acc.bankName || acc.type,
-            item.pagoNeto * factor,
-            item.client.terminal
-          ]);
-        }
+        row.alignment = { wrapText: true, vertical: 'middle' };
       }
     }
 
