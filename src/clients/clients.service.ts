@@ -40,6 +40,9 @@ export class ClientsService {
           where: { isActive: true },
           select: { id: true, serialNumber: true, model: true },
         },
+        paymentAccounts: {
+          where: { isActive: true },
+        },
       },
     });
   }
@@ -60,6 +63,9 @@ export class ClientsService {
         terminals: {
           where: { isActive: true },
         },
+        paymentAccounts: {
+          where: { isActive: true },
+        },
       },
     });
   }
@@ -77,13 +83,54 @@ export class ClientsService {
     });
   }
 
+  private validatePaymentAccounts(paymentAccounts?: any[]) {
+    if (!paymentAccounts || paymentAccounts.length === 0) return;
+    const activeAccounts = paymentAccounts.filter(acc => acc.isActive !== false);
+    if (activeAccounts.length === 0) return;
+
+    let totalPercentage = 0;
+    for (const acc of activeAccounts) {
+      const pct = acc.payoutPercentage !== undefined ? acc.payoutPercentage : 100;
+      totalPercentage += pct;
+    }
+
+    if (Math.abs(totalPercentage - 100.0) > 0.01) {
+      throw new ConflictException(
+        `La suma de los porcentajes de las cuentas de pago activas debe ser exactamente 100% (actual: ${totalPercentage}%)`,
+      );
+    }
+  }
+
   async create(data: CreateClientDto): Promise<Client> {
     try {
+      const { paymentAccounts, ...clientData } = data;
+      this.validatePaymentAccounts(paymentAccounts);
+
       const payload = {
-        ...data,
-        taxId: (data.taxId && data.taxId.trim()) ? data.taxId.trim() : null,
+        ...clientData,
+        taxId: (clientData.taxId && clientData.taxId.trim()) ? clientData.taxId.trim() : null,
       };
-      return await this.prisma.client.create({ data: payload });
+
+      return await this.prisma.client.create({
+        data: {
+          ...payload,
+          paymentAccounts: paymentAccounts
+            ? {
+                create: paymentAccounts.map((acc) => ({
+                  type: acc.type,
+                  accountNumber: acc.accountNumber,
+                  holderName: acc.holderName || null,
+                  bankName: acc.bankName || null,
+                  payoutPercentage: acc.payoutPercentage !== undefined ? acc.payoutPercentage : 100,
+                  isActive: acc.isActive !== undefined ? acc.isActive : true,
+                })),
+              }
+            : undefined,
+        },
+        include: {
+          paymentAccounts: true,
+        },
+      });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
@@ -100,13 +147,43 @@ export class ClientsService {
   async update(id: any, data: UpdateClientDto): Promise<Client> {
     const clientId = typeof id === 'bigint' ? id : BigInt(id);
     try {
+      const { paymentAccounts, ...clientData } = data;
+
       const payload = {
-        ...data,
-        taxId: data.taxId !== undefined ? ((data.taxId && data.taxId.trim()) ? data.taxId.trim() : null) : undefined,
+        ...clientData,
+        taxId: clientData.taxId !== undefined ? ((clientData.taxId && clientData.taxId.trim()) ? clientData.taxId.trim() : null) : undefined,
       };
-      return await this.prisma.client.update({
-        where: { id: clientId },
-        data: payload,
+
+      return await this.prisma.$transaction(async (tx) => {
+        if (paymentAccounts !== undefined) {
+          this.validatePaymentAccounts(paymentAccounts);
+
+          await tx.clientPaymentAccount.deleteMany({
+            where: { clientId },
+          });
+        }
+
+        return await tx.client.update({
+          where: { id: clientId },
+          data: {
+            ...payload,
+            paymentAccounts: paymentAccounts
+              ? {
+                  create: paymentAccounts.map((acc) => ({
+                    type: acc.type,
+                    accountNumber: acc.accountNumber,
+                    holderName: acc.holderName || null,
+                    bankName: acc.bankName || null,
+                    payoutPercentage: acc.payoutPercentage !== undefined ? acc.payoutPercentage : 100,
+                    isActive: acc.isActive !== undefined ? acc.isActive : true,
+                  })),
+                }
+              : undefined,
+          },
+          include: {
+            paymentAccounts: true,
+          },
+        });
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {

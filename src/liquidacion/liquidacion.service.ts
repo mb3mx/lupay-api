@@ -237,7 +237,7 @@ export class LiquidacionService {
       include: {
         items: {
           include: {
-            client: { include: { sindicato: true, liquidadora: true } },
+            client: { include: { sindicato: true, liquidadora: true, paymentAccounts: true } },
             liquidadora: true,
           },
           orderBy: {
@@ -276,37 +276,142 @@ export class LiquidacionService {
     // Hoja 2: LIQ BUG por negocio
     const wsLiq = wb.addWorksheet('LIQ BUG');
     wsLiq.addRow([
-      'Negocio', 'Razón Social', 'Sindicato', 'Monto Settlement', 'Monto Bruto', 'Diferencia',
-      '% Comisión', 'Comisión', 'Pago Neto',
+      'Negocio', 'Razón Social', 'CLABE Empresa', 'Monto Liquidar', 'Sindicato', 'CLABE Sindicato',
+      'Monto Posre', 'Diferencia', '% Cliente', 'Com. Cliente', 'Pago Cliente', 'Terminal'
     ]);
     wsLiq.getRow(1).font = { bold: true };
     for (const item of liq.items) {
-      wsLiq.addRow([
-        item.client.name,
-        item.liquidadora?.razonSocial ?? '',
-        item.client.sindicato?.nombre ?? '',
-        item.montoSettlement,
-        item.montoBruto,
-        Math.round((item.montoSettlement - item.montoBruto) * 100) / 100,
-        `${(item.pctComision * 100).toFixed(2)}%`,
-        item.comision,
-        item.pagoNeto,
-      ]);
+      const accounts = item.client.paymentAccounts || [];
+      const activeAccounts = accounts.filter((a: any) => a.isActive);
+
+        wsLiq.addRow([
+          item.client.name,
+          item.liquidadora?.razonSocial ?? '',
+          item.liquidadora?.clabe ?? '',
+          item.montoBruto,
+          item.client.sindicato?.nombre ?? '',
+          item.client.sindicato?.clabe ?? '',
+          item.montoSettlement,
+          Math.round((item.montoSettlement - item.montoBruto) * 100) / 100,
+          `${(item.pctComision * 100).toFixed(2)}%`,
+          item.comision,
+          item.pagoNeto,
+          item.client.terminal
+        ]);
+
     }
 
-    // Hoja 3: Por Sindicato
+    // Hoja 3: LIQ  SIND por negocio
+    const wsLiqSind = wb.addWorksheet('LIQ  SIND');
+    wsLiqSind.addRow([
+      'Cliente', 'Razón Social', 'CLABE Empresa', 'Monto Bruto', '% Cliente', 'Com. Cliente', 'Pago Cliente',
+      'Sindicato', 'CLABE Sindicato', 'Reintegro', 'Cuenta', 'Titular', 'Banco', 'Pago', 'Terminal'
+    ]);
+    wsLiqSind.getRow(1).font = { bold: true };
+
+    for (const item of liq.items) {
+      const accounts = item.client.paymentAccounts || [];
+      const activeAccounts = accounts.filter((a: any) => a.isActive);
+
+      if (activeAccounts.length === 0) {
+        // Caso A: Sin cuenta de pago -> Leyenda RESGUARDO y 100% del monto
+        const row = wsLiqSind.addRow([
+          item.client.name,
+          item.liquidadora?.razonSocial ?? '',
+          item.liquidadora?.clabe ?? '',
+          item.montoBruto,
+          `${(item.pctComision * 100).toFixed(2)}%`,
+          item.comision,
+          item.pagoNeto,
+          item.client.sindicato?.nombre ?? '',
+          item.client.sindicato?.clabe ?? '',
+          item.client.reintegroTime,
+          '', // Cuenta
+          '', // Titular
+          '', // Banco
+          item.pagoNeto, // Pago
+          item.client.terminal
+        ]);
+        row.alignment = { wrapText: true, vertical: 'middle' };
+      } else {
+        // Casos B y C: Al menos una cuenta de pago -> Un solo registro con valores concatenados por salto de línea
+        const cuentaVal = activeAccounts
+          .map(acc => `${acc.accountNumber || '-'} (${acc.payoutPercentage.toFixed(0)}%)`)
+          .join('\n');
+
+        const titularVal = activeAccounts
+          .map(acc => acc.holderName)
+          .join('\n');
+
+        const bancoVal = activeAccounts
+          .map(acc => acc.bankName || acc.type)
+          .join('\n');
+
+        const pagoVal = activeAccounts.length === 1
+          ? item.pagoNeto * (activeAccounts[0].payoutPercentage / 100)
+          : activeAccounts
+              .map(acc => (item.pagoNeto * (acc.payoutPercentage / 100)).toFixed(2))
+              .join('\n');
+
+        const row = wsLiqSind.addRow([
+          item.client.name,
+          item.liquidadora?.razonSocial ?? '',
+          item.liquidadora?.clabe ?? '',
+          item.montoBruto,
+          `${(item.pctComision * 100).toFixed(2)}%`,
+          item.comision,
+          item.pagoNeto,
+          item.client.sindicato?.nombre ?? '',
+          item.client.sindicato?.clabe ?? '',
+          item.client.reintegroTime,
+          cuentaVal,
+          titularVal,
+          bancoVal,
+          pagoVal,
+          item.client.terminal
+        ]);
+        row.alignment = { wrapText: true, vertical: 'middle' };
+      }
+    }
+
+    // Hoja 4: Por Sindicato
     const wsSind = wb.addWorksheet('Por Sindicato');
     wsSind.addRow(['Sindicato', 'Banco', 'CLABE', 'Negocios', 'Total Pago Neto']);
     wsSind.getRow(1).font = { bold: true };
 
     const porSind: Record<string, { nombre: string; banco: string; clabe: string; count: number; total: number }> = {};
     for (const item of liq.items) {
-      const s = item.client.sindicato;
-      if (!s) continue;
-      const k = s.id.toString();
-      porSind[k] = porSind[k] || { nombre: s.nombre, banco: s.banco, clabe: s.clabe, count: 0, total: 0 };
-      porSind[k].count++;
-      porSind[k].total += item.pagoNeto;
+      const accounts = item.client.paymentAccounts || [];
+      const activeAccounts = accounts.filter((a: any) => a.isActive);
+
+      if (activeAccounts.length > 0) {
+        for (const acc of activeAccounts) {
+          const splitNeto = item.pagoNeto * (acc.payoutPercentage / 100);
+          const k = `ACC-${acc.id}`;
+          porSind[k] = porSind[k] || {
+            nombre: `${acc.type} - ${acc.holderName || item.client.name}`,
+            banco: acc.bankName || acc.type,
+            clabe: acc.accountNumber,
+            count: 0,
+            total: 0,
+          };
+          porSind[k].count++;
+          porSind[k].total += splitNeto;
+        }
+      } else {
+        const s = item.client.sindicato;
+        if (!s) continue;
+        const k = `SIND-${s.id}`;
+        porSind[k] = porSind[k] || {
+          nombre: s.nombre,
+          banco: s.banco,
+          clabe: s.clabe,
+          count: 0,
+          total: 0,
+        };
+        porSind[k].count++;
+        porSind[k].total += item.pagoNeto;
+      }
     }
     for (const v of Object.values(porSind)) {
       wsSind.addRow([v.nombre, v.banco, v.clabe, v.count, Math.round(v.total * 100) / 100]);

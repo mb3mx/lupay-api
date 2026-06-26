@@ -756,17 +756,17 @@ export class FilesService {
     }
 
     const parser = new TransaccionesParser();
-    const comerciosUnicos = new Map<string, { nombre: string; email: string }>();
+    const comerciosUnicos = new Map<string, { nombre: string; email: string; terminal: string }>();
 
     for await (const row of parser.parse(tempFilePath)) {
       if (!row.merchantName || !row.email) continue;
-      const nombre = row.merchantName.trim();
+      const nombre = row.merchantName.trim().toUpperCase();
       const email = row.email.trim().toLowerCase();
       if (!nombre || !email) continue;
 
       const key = `${nombre}::${email}`;
       if (!comerciosUnicos.has(key)) {
-        comerciosUnicos.set(key, { nombre, email });
+        comerciosUnicos.set(key, { nombre, email, terminal: row.terminalSerial || '' });
       }
     }
 
@@ -783,7 +783,7 @@ export class FilesService {
       where: {
         OR: [
           { name: { in: nombresArchivo } },
-          { contactEmail: { in: correosArchivo } }
+          { activationEmail: { in: correosArchivo } }
         ]
       }
     });
@@ -793,45 +793,49 @@ export class FilesService {
     const newClients: any[] = [];
 
     for (const item of listadoComercios) {
-      // 1. Coincidencia exacta
-      const exactMatch = clientesDB.find(
-        c => c.name.toLowerCase().trim() === item.nombre.toLowerCase().trim() &&
-             c.contactEmail?.toLowerCase().trim() === item.email
+      // 1. Buscar por el email del archivo en la base de datos
+      const emailMatch = clientesDB.find(
+        c => c.activationEmail?.toLowerCase().trim() === item.email
       );
-      if (exactMatch) continue;
 
-      // 2. Coincidencia por nombre pero con correo diferente
+      if (emailMatch) {
+        // Si existe y el nombre es diferente, actualizar nombre
+        if (emailMatch.name.toLowerCase().trim() !== item.nombre.toLowerCase().trim()) {
+          updateNames.push({
+            clientId: emailMatch.id.toString(),
+            email: emailMatch.activationEmail,
+            currentName: emailMatch.name,
+            newName: item.nombre,
+            terminal: item.terminal || ''
+          });
+        }
+        continue; // Cliente ya ubicado por email
+      }
+
+      // 2. Si no existe el email, buscar por nombre del archivo en la base de datos
       const nameMatch = clientesDB.find(
         c => c.name.toLowerCase().trim() === item.nombre.toLowerCase().trim()
       );
+
       if (nameMatch) {
-        updateEmails.push({
-          clientId: nameMatch.id.toString(),
-          name: nameMatch.name,
-          currentEmail: nameMatch.contactEmail || '',
-          newEmail: item.email
-        });
-        continue;
+        // Si existe y el email es diferente, actualizar email
+        if (nameMatch.activationEmail?.toLowerCase().trim() !== item.email) {
+          updateEmails.push({
+            clientId: nameMatch.id.toString(),
+            name: nameMatch.name,
+            currentEmail: nameMatch.activationEmail || '',
+            newEmail: item.email,
+            terminal: item.terminal || ''
+          });
+        }
+        continue; // Cliente ya ubicado por nombre comercial
       }
 
-      // 3. Coincidencia por correo pero con nombre diferente
-      const emailMatch = clientesDB.find(
-        c => c.contactEmail?.toLowerCase().trim() === item.email
-      );
-      if (emailMatch) {
-        updateNames.push({
-          clientId: emailMatch.id.toString(),
-          email: emailMatch.contactEmail,
-          currentName: emailMatch.name,
-          newName: item.nombre
-        });
-        continue;
-      }
-
-      // 4. No hay coincidencia (Cliente nuevo)
+      // 3. No existe ni email ni nombre (Cliente nuevo)
       newClients.push({
         name: item.nombre,
-        email: item.email
+        email: item.email,
+        terminal: item.terminal
       });
     }
 
@@ -861,10 +865,12 @@ export class FilesService {
         for (const update of resolvedIssues.updates) {
           const uId = BigInt(update.clientId);
           const dataToUpdate: any = {};
-          if (update.field === 'contactEmail') {
-            dataToUpdate.contactEmail = update.value.trim();
+          if (update.field === 'activationEmail') {
+            dataToUpdate.activationEmail = update.value.trim();
+            dataToUpdate.terminal = update.terminal && update.terminal.trim() ? update.terminal.trim() : null;
           } else if (update.field === 'name') {
             dataToUpdate.name = update.value.trim();
+            dataToUpdate.terminal = update.terminal && update.terminal.trim() ? update.terminal.trim() : null;
           }
           await tx.client.update({
             where: { id: uId },
@@ -883,6 +889,9 @@ export class FilesService {
               businessName: newCli.name.trim(),
               taxId: (newCli.taxId && newCli.taxId.trim()) ? newCli.taxId.trim() : null,
               contactEmail: newCli.email.trim().toLowerCase(),
+              activationEmail: newCli.activationEmail.trim().toLowerCase(),
+              terminal: newCli.terminal && newCli.terminal.trim() ? newCli.terminal.trim() : null,
+              reintegroTime: newCli.reintegroTime || null,
               commissionTotal: Number(newCli.commissionTotal) || 0,
               liquidadoraId: newCli.liquidadoraId ? BigInt(newCli.liquidadoraId) : undefined,
               sindicatoId: newCli.sindicatoId ? BigInt(newCli.sindicatoId) : undefined,

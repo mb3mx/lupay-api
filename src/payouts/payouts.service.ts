@@ -209,9 +209,7 @@ export class PayoutsService {
               id: true,
               code: true,
               name: true,
-              bankName: true,
-              bankAccount: true,
-              bankClabe: true,
+              paymentAccounts: true,
             },
           },
           _count: {
@@ -237,9 +235,7 @@ export class PayoutsService {
             id: true,
             code: true,
             name: true,
-            bankName: true,
-            bankAccount: true,
-            bankClabe: true,
+            paymentAccounts: true,
           },
         },
         items: {

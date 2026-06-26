@@ -81,6 +81,25 @@ enum ContracargoStatus {
   PERDIDO
 }
 
+enum PaymentAccountType {
+  KUSPIT
+  INNTEC
+  BANK
+}
+
+enum MenuItemType {
+  GROUP
+  COLLAPSE
+  ITEM
+}
+
+enum PermissionAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+}
+
 // ==================== MODELS ====================
 
 model User {
@@ -112,10 +131,11 @@ model User {
 }
 
 model Sindicato {
-  id     BigInt  @id @default(autoincrement())
-  nombre String  @unique
-  banco  String
-  clabe  String  @unique
+  id       BigInt  @id @default(autoincrement())
+  nombre   String  @unique
+  banco    String
+  clabe    String  @unique
+  isActive Boolean @default(true) @map("active")
 
   clients Client[]
 
@@ -128,6 +148,7 @@ model Liquidadora {
   razonSocial String  @map("razon_social")
   banco       String
   clabe       String  @unique
+  isActive    Boolean @default(true) @map("active")
 
   clients Client[]
   liquidacionItems LiquidacionItem[]
@@ -140,19 +161,19 @@ model Client {
   code             String  @unique
   name             String
   businessName     String  @map("business_name")
-  taxId            String? @unique @map("tax_id")
+  taxId            String? @map("tax_id")
   commissionTotal  Float   @default(0) @map("commission_total")
   afiliacion       String? @unique @map("afiliacion")
+  activationEmail  String  @unique @map("activation_email")
+  terminal         String? @map("terminal")
+  reintegroTime    String? @map("reintegro_time")
+  joinedAt         DateTime? @map("joined_at")
+  comments         String?   @map("comments")
 
   // Contact
   contactName   String? @map("contact_name")
   contactEmail  String? @map("contact_email")
   contactPhone  String? @map("contact_phone")
-
-  // Bank details
-  bankName    String? @map("bank_name")
-  bankAccount String? @map("bank_account")
-  bankClabe   String? @map("bank_clabe")
 
   isActive Boolean @default(true) @map("active")
 
@@ -172,6 +193,7 @@ model Client {
   payouts          Payout[]
   liquidacionItems LiquidacionItem[]
   users            User[]
+  paymentAccounts  ClientPaymentAccount[]
 
   @@index([code])
   @@index([taxId])
@@ -179,6 +201,24 @@ model Client {
   @@index([sindicatoId])
   @@index([liquidadoraId])
   @@map("client")
+}
+
+model ClientPaymentAccount {
+  id               BigInt             @id @default(autoincrement())
+  clientId         BigInt             @map("client_id")
+  client           Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type             PaymentAccountType
+  accountNumber    String             @map("account_number")
+  holderName       String?            @map("holder_name")
+  bankName         String?            @map("bank_name")
+  payoutPercentage Float              @default(100.00) @map("payout_percentage")
+  isActive         Boolean            @default(true) @map("is_active")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  @@index([clientId])
+  @@index([type])
+  @@map("client_payment_account")
 }
 
 model Terminal {
@@ -511,4 +551,40 @@ model Contracargo {
   @@index([transactionId])
   @@index([status])
   @@map("contracargo")
+}
+
+model MenuItem {
+  id       BigInt   @id @default(autoincrement())
+  parentId BigInt?  @map("parent_id")
+  parent   MenuItem? @relation("MenuItemChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children MenuItem[] @relation("MenuItemChildren")
+
+  title        String
+  translateKey String?      @map("translate_key")
+  type         MenuItemType @default(ITEM)
+  icon         String?
+  url          String?
+  exactMatch   Boolean      @default(false) @map("exact_match")
+  order        Int          @default(0)
+  isActive     Boolean      @default(true) @map("active")
+  roles        UserRole[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([parentId])
+  @@map("menu_item")
+}
+
+model Permission {
+  id       BigInt           @id @default(autoincrement())
+  resource String
+  action   PermissionAction
+  roles    UserRole[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([resource, action])
+  @@map("permission")
 }

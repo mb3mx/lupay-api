@@ -19,6 +19,8 @@ import { CommonModule } from './common/common.module';
 import { SindicatosModule } from './sindicatos/sindicatos.module';
 import { LiquidadorasModule } from './liquidadoras/liquidadoras.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { MenusModule } from './menus/menus.module';
+import { PermissionsModule } from './permissions/permissions.module';
 
 @Module({
   imports: [
@@ -45,6 +47,8 @@ import { NotificationsModule } from './notifications/notifications.module';
     SindicatosModule,
     LiquidadorasModule,
     NotificationsModule,
+    MenusModule,
+    PermissionsModule,
   ],
 })
 export class AppModule {}
