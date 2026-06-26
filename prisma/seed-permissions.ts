@@ -12,6 +12,11 @@ const PERMISSIONS: { resource: string; action: PermissionAction; roles: UserRole
   // liquidacion: hoy "generate" está abierto a cualquier autenticado; con
   // este seed queda restringido a ADMIN desde el primer despliegue.
   { resource: 'liquidacion', action: PermissionAction.CREATE, roles: [UserRole.ADMIN] },
+
+  // clients: preserva el comportamiento actual (crear/editar ADMIN-only;
+  // READ ya era ADMIN+USER vía @Roles, eso no cambia aquí).
+  { resource: 'clients', action: PermissionAction.CREATE, roles: [UserRole.ADMIN] },
+  { resource: 'clients', action: PermissionAction.UPDATE, roles: [UserRole.ADMIN] },
 ];
 
 async function main() {
