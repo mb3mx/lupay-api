@@ -869,7 +869,7 @@ export class FilesService {
             dataToUpdate.activationEmail = update.value.trim();
             dataToUpdate.terminal = update.terminal && update.terminal.trim() ? update.terminal.trim() : null;
           } else if (update.field === 'name') {
-            dataToUpdate.name = update.value.trim();
+            dataToUpdate.name = update.value.trim().toUpperCase();
             dataToUpdate.terminal = update.terminal && update.terminal.trim() ? update.terminal.trim() : null;
           }
           await tx.client.update({
@@ -885,8 +885,8 @@ export class FilesService {
           await tx.client.create({
             data: {
               code: newCli.code.trim(),
-              name: newCli.name.trim(),
-              businessName: newCli.name.trim(),
+              name: newCli.name.trim().toUpperCase(),
+              businessName: newCli.name.trim().toUpperCase(),
               taxId: (newCli.taxId && newCli.taxId.trim()) ? newCli.taxId.trim() : null,
               contactEmail: newCli.email.trim().toLowerCase(),
               activationEmail: newCli.activationEmail.trim().toLowerCase(),

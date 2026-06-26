@@ -108,6 +108,8 @@ export class ClientsService {
 
       const payload = {
         ...clientData,
+        name: clientData.name ? clientData.name.trim().toUpperCase() : clientData.name,
+        businessName: clientData.businessName ? clientData.businessName.trim().toUpperCase() : clientData.businessName,
         taxId: (clientData.taxId && clientData.taxId.trim()) ? clientData.taxId.trim() : null,
       };
 
@@ -151,6 +153,8 @@ export class ClientsService {
 
       const payload = {
         ...clientData,
+        name: clientData.name !== undefined ? (clientData.name ? clientData.name.trim().toUpperCase() : clientData.name) : undefined,
+        businessName: clientData.businessName !== undefined ? (clientData.businessName ? clientData.businessName.trim().toUpperCase() : clientData.businessName) : undefined,
         taxId: clientData.taxId !== undefined ? ((clientData.taxId && clientData.taxId.trim()) ? clientData.taxId.trim() : null) : undefined,
       };
 
